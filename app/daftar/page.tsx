@@ -78,7 +78,8 @@ export default function PendaftaranKiosk() {
   // 2. Semak No. IC Sahaja
   const tanganiSemakan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!carianIC.trim()) {
+    const bersihIC = carianIC.trim();
+    if (!bersihIC) {
       alert('Sila masukkan No. Kad Pengenalan untuk semakan.');
       return;
     }
@@ -88,7 +89,7 @@ export default function PendaftaranKiosk() {
       const { data, error } = await supabase
         .from('pesakit')
         .select('*')
-        .eq('no_ic', carianIC.trim())
+        .eq('no_ic', bersihIC)
         .maybeSingle();
 
       if (error) throw error;
@@ -104,7 +105,7 @@ export default function PendaftaranKiosk() {
         setStatusSemakan('ditemui');
       } else {
         setPesakitDitemui(null);
-        setNoIC(carianIC.trim());
+        setNoIC(bersihIC);
         setNama('');
         setNoTelefon('');
         setAlamat('');
@@ -132,7 +133,7 @@ export default function PendaftaranKiosk() {
     setPilihTabibKhusus(false);
   };
 
-  // 3. Proses Pendaftaran & Auto-Print Sahaja (WhatsApp Dinyahaktifkan Sementara)
+  // 3. Proses Pendaftaran & Auto-Print Sahaja
   const prosesDaftarDanAutoAksi = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!nama.trim() || !noIC.trim() || !noTelefon.trim()) {
@@ -144,9 +145,16 @@ export default function PendaftaranKiosk() {
     try {
       let pesakitId: string;
 
-      if (pesakitDitemui) {
-        pesakitId = pesakitDitemui.id;
-        await supabase
+      // Semak pangkalan data terlebih dahulu untuk menjamin tiada pelanggaran unique key
+      const { data: semakSediaAda } = await supabase
+        .from('pesakit')
+        .select('id')
+        .eq('no_ic', noIC.trim())
+        .maybeSingle();
+
+      if (pesakitDitemui || semakSediaAda) {
+        pesakitId = pesakitDitemui?.id || semakSediaAda!.id;
+        const { error: errUpdate } = await supabase
           .from('pesakit')
           .update({
             nama: nama.trim(),
@@ -156,6 +164,8 @@ export default function PendaftaranKiosk() {
             catatan_mobiliti: perluWheelchair ? catatanMobiliti : null
           })
           .eq('id', pesakitId);
+
+        if (errUpdate) throw errUpdate;
       } else {
         const { data: pesakitBaru, error: errPesakit } = await supabase
           .from('pesakit')
@@ -170,8 +180,21 @@ export default function PendaftaranKiosk() {
           .select()
           .single();
 
-        if (errPesakit) throw errPesakit;
-        pesakitId = pesakitBaru.id;
+        if (errPesakit) {
+          // Sandaran jika berlaku konflik serentak (code 23505)
+          if (errPesakit.code === '23505') {
+            const { data: pesakitKonflik } = await supabase
+              .from('pesakit')
+              .select('id')
+              .eq('no_ic', noIC.trim())
+              .single();
+            pesakitId = pesakitKonflik!.id;
+          } else {
+            throw errPesakit;
+          }
+        } else {
+          pesakitId = pesakitBaru.id;
+        }
       }
 
       // Jana Nombor Giliran Hari Ini (Format K-xxx)
@@ -184,7 +207,7 @@ export default function PendaftaranKiosk() {
       const turutan = (count || 0) + 1;
       const noGiliranJana = `K-${String(turutan).padStart(3, '0')}`;
 
-      // Semak nombor giliran aktif sebelum ini (sedang dipanggil/rawat atau turutan sebelumnya)
+      // Semak nombor giliran aktif sebelum ini
       const { data: giliranAktif } = await supabase
         .from('giliran')
         .select('no_giliran, status')
@@ -353,7 +376,7 @@ export default function PendaftaranKiosk() {
       alignItems: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
-      {/* Gaya Cetakan Slip Terasing - Hanya Kotak Resit Dicetak */}
+      {/* Gaya Cetakan Slip Terasing */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * {
@@ -898,7 +921,6 @@ export default function PendaftaranKiosk() {
                 <strong style={{ color: '#0f172a' }}>{tiketSelesai.nama}</strong>
               </div>
 
-              {/* Baris ini hanya muncul jika pesakit memilih tabib tertentu */}
               {tiketSelesai.perawat_nama && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#64748b' }}>Penetapan Tabib:</span>
@@ -917,9 +939,7 @@ export default function PendaftaranKiosk() {
               </div>
             </div>
 
-            {/* ========================================================
-                MAKLUMAT NOMBOR TERKINI SEBELUMNYA & STATUS PANGGILAN
-               ======================================================== */}
+            {/* Maklumat Nombor Terkini Sebelumnya */}
             <div style={{
               backgroundColor: '#f8fafc',
               border: '1px dashed #cbd5e1',
@@ -954,7 +974,7 @@ export default function PendaftaranKiosk() {
               </div>
             </div>
 
-            {/* BUTANG TUNGGAL: DAFTAR (Membersihkan skrin untuk pesakit seterusnya) */}
+            {/* Butang Selesai & Semak Semula */}
             <div className="kioskHideOnPrint">
               <button
                 onClick={() => {
