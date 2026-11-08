@@ -101,7 +101,7 @@ export default function SkrinTVDewan() {
         setSolatAktif('Subuh');
       }
     } catch (e) {
-      // Kekalkan
+      // Abaikan jika ralat penukaran waktu
     }
   };
 
@@ -111,7 +111,7 @@ export default function SkrinTVDewan() {
       document.documentElement.requestFullscreen().then(() => {
         setIsSkrinPenuh(true);
       }).catch((err) => {
-        console.log('Kebenaran fullscreen pelayar diperlukan:', err);
+        console.log('Kebenaran skrin penuh pelayar diperlukan:', err);
       });
     }
   };
@@ -163,7 +163,7 @@ export default function SkrinTVDewan() {
           else setStatusCuaca('Redup');
         }
       } catch (e) {
-        // Abaikan jika luar talian
+        // Abaikan ralat rangkaian cuaca
       }
     };
     ambilCuaca();
@@ -190,13 +190,13 @@ export default function SkrinTVDewan() {
           kiraSolatAktif(jadualBaru);
         }
       } catch (e) {
-        // Kekalkan nilai
+        // Abaikan ralat rangkaian solat
       }
     };
     ambilWaktuSolat();
   }, []);
 
-  // 5. Muat Data Ticker & Makluman Tetap
+  // 5. Muat Data Ticker & Makluman Tetap dari Supabase
   const muatDataPengumuman = async () => {
     try {
       const { data } = await supabase
@@ -281,7 +281,7 @@ export default function SkrinTVDewan() {
     }, 7000);
   };
 
-  // 7. Muat Data Skrin, Status Bilik & Giliran
+  // 7. Muat Data Skrin, Status Bilik & Giliran Masa Nyata
   const muatDataSkrin = async () => {
     try {
       const { data: bilikData } = await supabase
@@ -362,7 +362,7 @@ export default function SkrinTVDewan() {
         .select('no_giliran')
         .eq('status', 'menunggu')
         .order('created_at', { ascending: true })
-        .limit(8);
+        .limit(6);
 
       if (menungguData) setSenaraiMenunggu(menungguData);
 
@@ -412,20 +412,19 @@ export default function SkrinTVDewan() {
     <div
       className={styles.tvContainer}
       onClick={() => {
-        // Klik di mana-mana ruang TV akan mengaktifkan fullscreen secara automatik
         if (!document.fullscreenElement) {
           aktifkanSkrinPenuh();
         }
       }}
     >
-      {/* ZON BUTANG PANGKAH: HANYA MUNCUL APABILA TETIKUS DIHALAKAN KE ATAS KANAN */}
+      {/* Butang Pangkah Keluar Skrin Penuh */}
       <div className={styles.exitZone}>
         <button
           onClick={keluarSkrinPenuh}
           className={styles.btnExitFullscreen}
           title="Keluar dari Mod Skrin Penuh"
         >
-          <X size={22} strokeWidth={2.5} />
+          <X size={20} strokeWidth={2.5} />
         </button>
       </div>
 
@@ -460,7 +459,7 @@ export default function SkrinTVDewan() {
 
           <div className={styles.islamicInfoBar}>
             <div className={styles.weatherWidget}>
-              <CloudSun size={22} />
+              <CloudSun size={20} />
               <span>{suhuCuaca} ({statusCuaca})</span>
             </div>
 
@@ -509,9 +508,8 @@ export default function SkrinTVDewan() {
                   <div className={styles.proceedLabel}>Sila Masuk Ke</div>
                   <div className={styles.roomDestinationRow}>
                     <span className={styles.roomDestination}>{panggilanTerkini.bilik}</span>
-                    {/* IKON ANAK PANAH TEBAL (SOLID & JELAS) */}
                     <div className={styles.arrowCircle}>
-                      <ArrowRight size={32} strokeWidth={4} />
+                      <ArrowRight size={26} strokeWidth={4} />
                     </div>
                   </div>
                   <div className={styles.perawatName}>Bersama {panggilanTerkini.namaPerawat}</div>
@@ -519,8 +517,8 @@ export default function SkrinTVDewan() {
               </>
             ) : (
               <div className={styles.emptyCallContent}>
-                <Volume2 size={64} style={{ opacity: 0.6, marginBottom: '0.8rem' }} />
-                <p style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
+                <Volume2 size={54} style={{ opacity: 0.6, marginBottom: '0.6rem' }} />
+                <p style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
                   Sila nantikan nombor anda diumumkan
                 </p>
               </div>
@@ -531,7 +529,7 @@ export default function SkrinTVDewan() {
           <section className={styles.doctorStatusCard}>
             <div className={styles.doctorStatusHeader}>
               <span className={styles.doctorStatusTitle}>
-                <Stethoscope size={22} /> STATUS BILIK RAWATAN
+                <Stethoscope size={20} /> STATUS BILIK RAWATAN
               </span>
               {semuaBilikStatus.length > 4 && (
                 <span className={styles.pageIndicatorPill}>
@@ -593,9 +591,9 @@ export default function SkrinTVDewan() {
           <div className={styles.fixedNoticeCard}>
             <div className={styles.noticeItemRow}>
               <div className={styles.roundIconTeal}>
-                <Bell size={20} />
+                <Bell size={18} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div className={styles.noticeContentTitle}>{maklumanTetap[0]?.tajuk}</div>
                 <p className={styles.noticeContentDesc}>{maklumanTetap[0]?.huraian}</p>
               </div>
@@ -605,9 +603,9 @@ export default function SkrinTVDewan() {
 
             <div className={styles.noticeItemRow}>
               <div className={styles.roundIconTeal}>
-                <FileText size={20} />
+                <FileText size={18} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div className={styles.noticeContentTitle}>{maklumanTetap[1]?.tajuk}</div>
                 <p className={styles.noticeContentDesc}>{maklumanTetap[1]?.huraian}</p>
               </div>
@@ -617,12 +615,12 @@ export default function SkrinTVDewan() {
           {/* BARIS 2 KANAN: GILIRAN MENUNGGU SETERUSNYA */}
           <div className={styles.waitingBoxCard}>
             <div className={styles.waitingHeaderRow}>
-              <Users size={22} />
+              <Users size={20} />
               <span>GILIRAN MENUNGGU SETERUSNYA</span>
             </div>
 
             {senaraiMenunggu.length === 0 ? (
-              <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, fontStyle: 'italic' }}>
+              <p style={{ color: '#64748b', fontSize: '0.88rem', margin: 0, fontStyle: 'italic' }}>
                 Tiada pesakit dalam senarai menunggu.
               </p>
             ) : (
