@@ -30,7 +30,7 @@ export default function SkrinTVDewan() {
 
   // Cuaca & Waktu Solat
   const [suhuCuaca, setSuhuCuaca] = useState<string>('26°C');
-  const [statusCuaca, setStatusCuaca] = useState<string>('Redup');
+  const [statusCuaca, setStatusCuaca] = useState<string>('Mendung');
   const [jadualSolat, setJadualSolat] = useState<{ [key: string]: string }>({
     Subuh: '05:48',
     Zohor: '13:00',
@@ -60,6 +60,8 @@ export default function SkrinTVDewan() {
   ]);
 
   const panggilanTerkiniRef = useRef<string | null>(null);
+  const audioChimeRef = useRef<HTMLAudioElement | null>(null);
+  const audioTtsRef = useRef<HTMLAudioElement | null>(null);
 
   // Helper Pemformat Waktu Solat
   const formatMasaSolat = (waktu: any): string => {
@@ -71,7 +73,7 @@ export default function SkrinTVDewan() {
     return String(waktu);
   };
 
-  // Enjin Pengiraan Solat Aktif Mengikut Waktu Semasa
+  // Enjin Pengiraan Solat Aktif
   const kiraSolatAktif = (jadual: { [key: string]: string }) => {
     try {
       const kini = new Date();
@@ -101,12 +103,23 @@ export default function SkrinTVDewan() {
         setSolatAktif('Subuh');
       }
     } catch (e) {
-      // Abaikan jika ralat penukaran waktu
+      // Abaikan ralat penukaran waktu
     }
   };
 
-  // 1. Pengurusan Skrin Penuh (Fullscreen)
-  const aktifkanSkrinPenuh = () => {
+  // 1. Pengurusan Skrin Penuh & Buka Kunci Audio Android TV
+  const aktifkanSkrinPenuhDanAudio = () => {
+    setAudioDibenarkan(true);
+
+    if (audioChimeRef.current) {
+      audioChimeRef.current.play().then(() => {
+        if (audioChimeRef.current) {
+          audioChimeRef.current.pause();
+          audioChimeRef.current.currentTime = 0;
+        }
+      }).catch((err) => console.log('Izin audio TV:', err));
+    }
+
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => {
         setIsSkrinPenuh(true);
@@ -227,16 +240,13 @@ export default function SkrinTVDewan() {
     }
   };
 
-  // 6. Audio & Suara Panggilan TTS
+  // 6. Audio & Suara Panggilan
   const mainkanChimeStudio = () => {
-    try {
-      const chime = new Audio('/sounds/chime.mp3');
-      chime.volume = 0.85;
-      chime.play().catch((err) => {
-        console.log('Klik skrin untuk kebenaran audio pelayar:', err);
+    if (audioChimeRef.current) {
+      audioChimeRef.current.currentTime = 0;
+      audioChimeRef.current.play().catch((err) => {
+        console.log('Klik skrin untuk kebenaran audio pelayar TV:', err);
       });
-    } catch (e) {
-      console.log('Ralat audio:', e);
     }
   };
 
@@ -272,18 +282,28 @@ export default function SkrinTVDewan() {
     setTimeout(() => {
       try {
         const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
-        const voiceAudio = new Audio(audioUrl);
-        voiceAudio.volume = 1.0;
-        voiceAudio.play().catch(err => console.log('Ralat audio TTS:', err));
+        if (audioTtsRef.current) {
+          audioTtsRef.current.src = audioUrl;
+          audioTtsRef.current.play().catch(() => {
+            if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+              const utter = new SpeechSynthesisUtterance(ayatSebutan);
+              utter.lang = 'id-ID';
+              window.speechSynthesis.speak(utter);
+            }
+          });
+        }
       } catch (err) {
         console.error('Ralat TTS:', err);
       }
-    }, 7000);
+    }, 2500);
   };
 
-  // 7. Muat Data Skrin, Status Bilik & Giliran Masa Nyata
+  // 7. Muat Data Skrin, Status Bilik & Giliran Masa Nyata (Ditapis Tarikh Hari Ini)
   const muatDataSkrin = async () => {
     try {
+      const tarikhHariIni = new Date().toISOString().split('T')[0];
+
+      // A. Ambil Maklumat Bilik Rawatan & Tabib Bertugas
       const { data: bilikData } = await supabase
         .from('bilik_rawatan')
         .select('*, perawat(id, nama, no_bilik)')
@@ -296,17 +316,23 @@ export default function SkrinTVDewan() {
         .select('*')
         .eq('status_aktif', true);
 
+      // B. Ambil Giliran Aktif (Hanya yang Didaftarkan Hari Ini)
       const { data: giliranAktif } = await supabase
         .from('giliran')
         .select('id, no_giliran, status, perawat_id, perlu_kerusi_roda, created_at, pesakit(nama), perawat(id, nama, no_bilik)')
         .in('status', ['dipanggil', 'sedang_rawat', 'rawatan'])
+        .gte('created_at', `${tarikhHariIni}T00:00:00`)
         .order('created_at', { ascending: false });
 
       if (giliranAktif && giliranAktif.length > 0 && bilikData) {
-        const palingKini = giliranAktif[0];
+        const sedangDipanggil = giliranAktif.filter(g => g.status === 'dipanggil');
+        const sedangRawat = giliranAktif.filter(g => g.status === 'sedang_rawat' || g.status === 'rawatan');
+        const palingKini = sedangDipanggil.length > 0 ? sedangDipanggil[0] : sedangRawat[0];
 
-        if (palingKini.id !== panggilanTerkiniRef.current) {
-          panggilanTerkiniRef.current = palingKini.id;
+        const tokenPanggilan = `${palingKini.id}_${palingKini.status}`;
+
+        if (tokenPanggilan !== panggilanTerkiniRef.current) {
+          panggilanTerkiniRef.current = tokenPanggilan;
 
           const perawatObj = palingKini.perawat as any;
           const bilikUstaz = bilikData.find(b => 
@@ -327,11 +353,19 @@ export default function SkrinTVDewan() {
           setPanggilanTerkini(infoPanggilan);
           panggilSuara(infoPanggilan.noGiliran, infoPanggilan.bilik, infoPanggilan.namaPerawat);
         }
+      } else {
+        // Kosongkan petak panggilan jika semua telah selesai
+        setPanggilanTerkini(null);
+        panggilanTerkiniRef.current = null;
       }
 
+      // C. Padankan Status 4 Bilik Rawatan
       if (bilikData) {
         const bilikKemaskini = bilikData.map((b) => {
-          const perawatBilik = b.perawat || semuaPerawat?.find(p => p.no_bilik && p.no_bilik.toLowerCase().trim() === b.nama_bilik.toLowerCase().trim());
+          const perawatBilik = b.perawat || semuaPerawat?.find(p => 
+            (b.perawat_semasa_id && String(p.id) === String(b.perawat_semasa_id)) ||
+            (p.no_bilik && p.no_bilik.toLowerCase().trim() === b.nama_bilik.toLowerCase().trim())
+          );
           const namaPerawat = perawatBilik?.nama || null;
 
           const rawatanBilik = giliranAktif?.find((g: any) => {
@@ -357,14 +391,16 @@ export default function SkrinTVDewan() {
         setSemuaBilikStatus(bilikKemaskini);
       }
 
+      // D. Ambil Giliran Menunggu (HANYA YANG DIDAFTAR HARI INI)
       const { data: menungguData } = await supabase
         .from('giliran')
         .select('no_giliran')
         .eq('status', 'menunggu')
+        .gte('created_at', `${tarikhHariIni}T00:00:00`)
         .order('created_at', { ascending: true })
         .limit(6);
 
-      if (menungguData) setSenaraiMenunggu(menungguData);
+      setSenaraiMenunggu(menungguData || []);
 
     } catch (err) {
       console.error('Ralat kemaskini TV:', err);
@@ -374,7 +410,7 @@ export default function SkrinTVDewan() {
   useEffect(() => {
     muatDataSkrin();
     muatDataPengumuman();
-    const intervalPoll = setInterval(muatDataSkrin, 3000);
+    const intervalPoll = setInterval(muatDataSkrin, 2500);
 
     const saluran = supabase
       .channel('tv_realtime_channel')
@@ -390,7 +426,7 @@ export default function SkrinTVDewan() {
     };
   }, []);
 
-  // 8. Penggiliran Bilik (4 Bilik Setiap Paparan)
+  // 8. Penggiliran Paparan Bilik
   const jumlahHalaman = Math.max(1, Math.ceil(semuaBilikStatus.length / 4));
 
   useEffect(() => {
@@ -412,12 +448,15 @@ export default function SkrinTVDewan() {
     <div
       className={styles.tvContainer}
       onClick={() => {
-        if (!document.fullscreenElement) {
-          aktifkanSkrinPenuh();
+        if (!audioDibenarkan) {
+          aktifkanSkrinPenuhDanAudio();
         }
       }}
     >
-      {/* Butang Pangkah Keluar Skrin Penuh */}
+      <audio ref={audioChimeRef} src="/sounds/chime.mp3" preload="auto" />
+      <audio ref={audioTtsRef} preload="auto" />
+
+      {/* Butang Keluar Skrin Penuh */}
       <div className={styles.exitZone}>
         <button
           onClick={keluarSkrinPenuh}
@@ -433,11 +472,7 @@ export default function SkrinTVDewan() {
           <div className={styles.audioBanner}>
             <span>Sila klik butang di sebelah untuk membenarkan loceng dan suara panggilan TV dewan.</span>
             <button
-              onClick={() => {
-                setAudioDibenarkan(true);
-                mainkanChimeStudio();
-                aktifkanSkrinPenuh();
-              }}
+              onClick={aktifkanSkrinPenuhDanAudio}
               className={styles.btnEnableAudio}
             >
               Aktifkan Suara Panggilan & Skrin Penuh
@@ -445,9 +480,7 @@ export default function SkrinTVDewan() {
           </div>
         )}
 
-        {/* ========================================================
-            PENGEPALA ATAS: LOGO + TAKWIM SOLAT & CUACA + JAM SEBARIS
-           ======================================================== */}
+        {/* Pengepala Atas */}
         <header className={styles.topBar}>
           <div className={styles.clinicBrand}>
             <img src="/logo.png" alt="SyifaLink" className={styles.logoImage} />
@@ -482,9 +515,7 @@ export default function SkrinTVDewan() {
           </div>
         </header>
 
-        {/* ========================================================
-            SUSUN ATUR UTAMA (GRID 2 LAJUR X 2 BARIS SELARI)
-           ======================================================== */}
+        {/* Susun Atur Utama */}
         <div className={styles.mainLayout}>
           {/* BARIS 1 KIRI: SEDANG DIPANGGIL */}
           <section className={styles.nowSeeingCard}>
@@ -636,7 +667,7 @@ export default function SkrinTVDewan() {
         </div>
       </div>
 
-      {/* Palang Makluman Bergerak di Bawah */}
+      {/* Ticker Makluman Bergerak */}
       <footer className={styles.tickerFooter}>
         <div className={styles.tickerTrack}>
           {[...senaraiTicker, ...senaraiTicker].map((item, idx) => (
