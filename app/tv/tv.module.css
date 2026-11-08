@@ -1,0 +1,755 @@
+/* ========================================================
+   1. LATAR BELAKANG TV: DIKUNCI 100VH UNTUK PAPARAN PENUH
+   ======================================================== */
+.tvContainer {
+  height: 100vh;
+  min-height: 100vh;
+  max-height: 100vh;
+  background-color: #eef6f8;
+  background-image: 
+    radial-gradient(circle at 12% 15%, rgba(0, 197, 205, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 88% 85%, rgba(0, 135, 144, 0.07) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 0l10 15 15-5-5 15 15 10-15 10 5 15-15-5-10 15-10-15-15 5 5-15-15-10 15-10-5-15 15 5z' fill='%23008790' fill-opacity='0.02' fill-rule='evenodd'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='%2300c5cd' stroke-opacity='0.02' fill='none' stroke-width='1'/%3E%3C/svg%3E");
+  color: #0f2730;
+  padding: 1.15rem 2.25rem 0.85rem 2.25rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ========================================================
+   ZON PANGKAH KELUAR SKRIN PENUH (HOVER SAHAJA)
+   ======================================================== */
+.exitZone {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 90px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.btnExitFullscreen {
+  background: rgba(15, 39, 48, 0.65);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: all 0.25s ease-in-out;
+  backdrop-filter: blur(8px);
+}
+
+.exitZone:hover .btnExitFullscreen {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.btnExitFullscreen:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.contentWrapper {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.audioBanner {
+  background-color: #e0f7f9;
+  border: 1.5px solid #00a8b5;
+  color: #005f67;
+  padding: 0.55rem 1.25rem;
+  border-radius: 0.6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  box-shadow: 0 6px 16px rgba(0, 168, 181, 0.15);
+  flex-shrink: 0;
+}
+
+.btnEnableAudio {
+  background-color: #008790;
+  color: #ffffff;
+  font-weight: 750;
+  border: none;
+  padding: 0.45rem 1.1rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btnEnableAudio:hover {
+  background-color: #006f76;
+}
+
+/* ========================================================
+   2. PENGEPALA: LOGO + TAKWIM SOLAT & CUACA + JAM SEBARIS
+   ======================================================== */
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1.5px solid #d1eaed;
+  flex-shrink: 0;
+}
+
+.clinicBrand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.logoImage {
+  height: 68px;
+  width: auto;
+  filter: drop-shadow(0 4px 10px rgba(0, 135, 144, 0.22));
+}
+
+.welcomeText {
+  font-size: 0.85rem;
+  color: #55757d;
+  font-weight: 600;
+  margin: 0;
+  display: block;
+  letter-spacing: 0.02em;
+}
+
+.clinicTitleText {
+  font-size: 1.55rem;
+  font-weight: 900;
+  color: #007b85;
+  margin: 0.1rem 0 0 0;
+  letter-spacing: -0.02em;
+}
+
+.islamicInfoBar {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid #d4edf0;
+  border-radius: 1rem;
+  padding: 0.55rem 1.35rem;
+  backdrop-filter: blur(12px);
+  box-shadow: 
+    0 12px 28px -6px rgba(0, 135, 144, 0.12),
+    0 4px 10px -2px rgba(15, 39, 48, 0.04);
+}
+
+.weatherWidget {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-right: 1.5px solid #e2f2f4;
+  padding-right: 1.25rem;
+  font-size: 1.05rem;
+  color: #008790;
+  font-weight: 800;
+}
+
+.prayerTimesStrip {
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+}
+
+.prayerItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.prayerName {
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.prayerTime {
+  color: #1e293b;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.prayerActive .prayerName {
+  color: #008790;
+}
+
+.prayerActive .prayerTime {
+  color: #008790;
+  font-size: 1.18rem;
+  font-weight: 900;
+}
+
+.clockArea {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.digitalTime {
+  font-size: 2.25rem;
+  font-weight: 900;
+  color: #007b85;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.digitalDate {
+  font-size: 0.85rem;
+  color: #55757d;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+/* ========================================================
+   3. SUSUN ATUR UTAMA (MEREGANG SEPENUHNYA SECARA PANTAS)
+   ======================================================== */
+.mainLayout {
+  display: grid;
+  grid-template-columns: 0.95fr 1.45fr;
+  grid-template-rows: 1.35fr 1fr;
+  gap: 1.25rem 1.65rem;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+/* ========================================================
+   BARIS 1 KIRI: SEDANG DIPANGGIL (KACA TERAPUNG)
+   ======================================================== */
+.nowSeeingCard {
+  background: linear-gradient(145deg, #009ea8 0%, #008790 55%, #006f76 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 1.35rem;
+  color: #ffffff;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  text-align: center;
+  box-shadow: 
+    0 22px 45px -10px rgba(0, 135, 144, 0.42),
+    0 8px 18px -4px rgba(15, 39, 48, 0.08),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.35);
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.nowSeeingCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 1.35rem 1.35rem 0 0;
+  pointer-events: none;
+}
+
+.nowSeeingHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+}
+
+.nowSeeingTitle {
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nowSeeingSubtitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #c9f5f7;
+  text-transform: uppercase;
+}
+
+.activeNumber {
+  font-size: 6.8rem;
+  font-weight: 950;
+  color: #9ee82b;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  margin: 0.5rem 0 0.3rem 0;
+  text-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.wheelchairIcon {
+  font-size: 3rem;
+  color: #fef08a;
+}
+
+.patientName {
+  font-size: 1.55rem;
+  font-weight: 750;
+  color: #ffffff;
+  margin-bottom: 0.75rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.proceedBox {
+  width: 100%;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  padding-top: 0.65rem;
+}
+
+.proceedLabel {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #d1f7f9;
+  margin-bottom: 0.2rem;
+}
+
+.roomDestinationRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.roomDestination {
+  font-size: 3.1rem;
+  font-weight: 950;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.38);
+  line-height: 1;
+}
+
+.arrowCircle {
+  background-color: #9ee82b;
+  color: #005a60;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.perawatName {
+  font-size: 0.95rem;
+  color: #c9f5f7;
+}
+
+.emptyCallContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: #c9f5f7;
+}
+
+/* ========================================================
+   BARIS 1 KANAN: STATUS 4 BILIK RAWATAN
+   ======================================================== */
+.doctorStatusCard {
+  background: #ffffff;
+  border-radius: 1.35rem;
+  border: 1.5px solid #d4edf0;
+  box-shadow: 
+    0 18px 40px -10px rgba(0, 135, 144, 0.16),
+    0 6px 14px -3px rgba(15, 39, 48, 0.04),
+    inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.doctorStatusHeader {
+  background-color: #008790;
+  color: #ffffff;
+  padding: 0.85rem 1.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.doctorStatusTitle {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-transform: uppercase;
+}
+
+.pageIndicatorPill {
+  background-color: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.25rem 0.7rem;
+  border-radius: 9999px;
+}
+
+.doctorStatusList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.roomRow {
+  display: grid;
+  grid-template-columns: 1.6fr 1.4fr 1fr;
+  align-items: center;
+  padding: 0.75rem 1.4rem;
+  border-bottom: 2px solid #d4edf0;
+  flex: 1;
+  transition: background-color 0.2s;
+}
+
+.roomRow:last-child {
+  border-bottom: none;
+}
+
+.roomRowBusy {
+  background-color: #fff6f6;
+}
+
+.roomDoctorCol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.roomLabelTitle {
+  font-size: 1.15rem;
+  font-weight: 950;
+  color: #007b85;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.roomDoctorName {
+  font-size: 1.12rem;
+  font-weight: 550;
+  color: #1e293b;
+  letter-spacing: 0.01em;
+}
+
+.rehatText {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.roomStatusCol {
+  display: flex;
+  align-items: center;
+}
+
+.statusSeeing {
+  color: #16a34a;
+  font-weight: 800;
+  font-size: 0.98rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.statusAvailable {
+  color: #0d9488;
+  font-weight: 750;
+  font-size: 0.95rem;
+}
+
+.statusClosed {
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.92rem;
+  font-style: italic;
+}
+
+.roomWaitCol {
+  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.badgeBusyPill {
+  background-color: #fee2e2;
+  border: 1px solid #ef4444;
+  color: #b91c1c;
+  padding: 0.35rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.badgeAvailablePill {
+  background-color: #e0f7f9;
+  border: 1px solid #00a8b5;
+  color: #007b85;
+  padding: 0.35rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.badgeClosedPill {
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  padding: 0.35rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 7px rgba(22, 163, 74, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+.pulseDot {
+  width: 9px;
+  height: 9px;
+  background-color: #16a34a;
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulseDot 1.4s infinite;
+}
+
+/* ========================================================
+   BARIS 2 KIRI: PERINGATAN PESAKIT (KAD TETAP BAWAH KIRI)
+   ======================================================== */
+.fixedNoticeCard {
+  background: #ffffff;
+  border: 1.5px solid #d4edf0;
+  border-radius: 1.35rem;
+  padding: 1.35rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* Dimulakan dari atas secara kemas */
+  gap: 1rem;
+  box-shadow: 
+    0 16px 36px -8px rgba(0, 135, 144, 0.14),
+    0 4px 12px rgba(15, 39, 48, 0.04),
+    inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.noticeItemRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.roundIconTeal {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #008790;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 135, 144, 0.3);
+}
+
+.noticeContentTitle {
+  font-size: 0.92rem;
+  font-weight: 850;
+  color: #007b85;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+
+.noticeContentDesc {
+  font-size: 0.85rem;
+  color: #55757d;
+  line-height: 1.4;
+  margin: 0;
+  font-weight: 550;
+}
+
+.noticeDivider {
+  height: 1.5px;
+  background-color: #e5f4f6;
+  width: 100%;
+}
+
+/* ========================================================
+   BARIS 2 KANAN: GILIRAN MENUNGGU (TAJUK KEKAL TERPAKU DI ATAS)
+   ======================================================== */
+.waitingBoxCard {
+  background: #ffffff;
+  border: 1.5px solid #d4edf0;
+  border-radius: 1.35rem;
+  padding: 1.35rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* PENTING: Tajuk sentiasa kekal di atas tanpa tenggelam ke tengah */
+  box-shadow: 
+    0 16px 36px -8px rgba(0, 135, 144, 0.15),
+    0 4px 12px rgba(15, 39, 48, 0.04),
+    inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.waitingHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #007b85;
+  font-size: 1rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 1.15rem; /* Jarak selesa sebelum lencana nombor */
+  flex-shrink: 0;
+}
+
+.waitingChipsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.15rem;
+}
+
+.waitingChip {
+  background: linear-gradient(135deg, #009ea8 0%, #008790 100%);
+  border: 1.5px solid #38bdf8;
+  color: #ffffff;
+  padding: 0.7rem 1.55rem;
+  border-radius: 0.75rem;
+  font-size: 1.65rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  box-shadow: 0 6px 16px rgba(0, 135, 144, 0.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ========================================================
+   4. PALANG MAKLUMAN BERGERAK: TERAPUNG KE ATAS
+   ======================================================== */
+.tickerFooter {
+  background: linear-gradient(90deg, #008790 0%, #009ea8 50%, #008790 100%);
+  border: 1.5px solid #00c5cd;
+  border-radius: 0.95rem;
+  padding: 1.05rem 0;
+  margin: 0.4rem 0 0.5rem 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  box-shadow: 
+    0 12px 28px -6px rgba(0, 135, 144, 0.35),
+    0 4px 10px rgba(15, 39, 48, 0.08);
+  min-height: 64px;
+}
+
+.tickerTrack {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 160s linear infinite;
+}
+
+.tickerTrack:hover {
+  animation-play-state: paused;
+}
+
+.tickerItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.35rem;
+  margin-right: 7.5rem;
+}
+
+.arabicText {
+  font-family: "Amiri", "Traditional Arabic", serif;
+  font-size: 1.75rem;
+  color: #e6fffa;
+  direction: rtl;
+  font-weight: 700;
+}
+
+.translationText {
+  color: #ffffff;
+  font-style: normal !important;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.surahRef {
+  background-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 0.22rem 0.75rem;
+  border-radius: 0.45rem;
+  font-style: normal;
+}
+
+.noticeTag {
+  background-color: #9ee82b;
+  color: #005a60;
+  font-weight: 900;
+  font-size: 0.88rem;
+  padding: 0.22rem 0.75rem;
+  border-radius: 0.35rem;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}

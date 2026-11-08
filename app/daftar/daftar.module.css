@@ -1,0 +1,338 @@
+.container {
+  min-height: 100vh;
+  background-color: #0f172a;
+  color: #f8fafc;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+  font-family: inherit;
+}
+
+.kioskCard {
+  width: 100%;
+  max-width: 600px;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #34d399; /* Emerald Green */
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin-top: 0.25rem;
+}
+
+.searchBox {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.inputField {
+  flex: 1;
+  background-color: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  color: #ffffff;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.inputField:focus {
+  border-color: #34d399;
+}
+
+.btnPrimary {
+  background-color: #10b981;
+  color: #0f172a;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btnPrimary:hover {
+  background-color: #059669;
+}
+
+.historyCard {
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.patientName {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #38bdf8;
+  margin: 0 0 0.5rem 0;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  margin-bottom: 1rem;
+}
+
+.infoLabel {
+  color: #64748b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  margin-bottom: 0.2rem;
+}
+
+.sectionTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.selectField {
+  width: 100%;
+  background-color: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  color: #ffffff;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  outline: none;
+}
+
+.emergencyBanner {
+  background-color: #450a0a;
+  border: 1px solid #991b1b;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fca5a5;
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.btnSubmit {
+  width: 100%;
+  background-color: #34d399;
+  color: #022c22;
+  font-weight: 700;
+  font-size: 1.1rem;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.btnSubmit:active {
+  transform: scale(0.98);
+}
+/* --- Gaya Tiket Giliran Pop-up --- */
+.ticketOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.ticketCard {
+  background-color: #ffffff;
+  color: #0f172a;
+  width: 100%;
+  max-width: 360px;
+  border-radius: 1rem;
+  padding: 1.75rem;
+  text-align: center;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  border-top: 8px solid #10b981;
+}
+
+.ticketClinic {
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #059669;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.ticketNumber {
+  font-size: 3.5rem;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0.5rem 0;
+  line-height: 1;
+}
+
+.ticketDetails {
+  border-top: 1px dashed #cbd5e1;
+  border-bottom: 1px dashed #cbd5e1;
+  padding: 0.75rem 0;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ticketRow {
+  display: flex;
+  justify-content: space-between;
+}
+
+.ticketLabel {
+  color: #64748b;
+}
+
+.ticketValue {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ticketNote {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 1.25rem;
+}
+
+.btnCloseTicket {
+  width: 100%;
+  background-color: #0f172a;
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btnCloseTicket:hover {
+  background-color: #334155;
+}
+/* --- Butang Cetak & Aksi Tiket --- */
+.ticketActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.btnPrintTicket {
+  flex: 1;
+  background-color: #10b981;
+  color: #022c22;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: background-color 0.2s;
+}
+
+.btnPrintTicket:hover {
+  background-color: #059669;
+}
+
+/* --- Konfigurasi Khas Kertas Thermal Mini Printer (58mm / 80mm) --- */
+@media print {
+  /* Sembunyikan semua elemen di skrin kecuali kad tiket */
+  body * {
+    visibility: hidden;
+  }
+
+  .ticketOverlay {
+    position: static !important;
+    background: none !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .ticketCard, .ticketCard * {
+    visibility: visible;
+  }
+
+  .ticketCard {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 58mm !important; /* Format piawai resit mini 58mm */
+    margin: 0 !important;
+    padding: 8px !important;
+    box-shadow: none !important;
+    border: none !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    font-family: 'Courier New', Courier, monospace !important;
+  }
+
+  .ticketNumber {
+    font-size: 2.75rem !important;
+    color: #000000 !important;
+    margin: 0.25rem 0 !important;
+  }
+
+  .ticketClinic {
+    color: #000000 !important;
+    font-size: 0.8rem !important;
+  }
+
+  .ticketDetails {
+    border-top: 1px dashed #000000 !important;
+    border-bottom: 1px dashed #000000 !important;
+    padding: 0.5rem 0 !important;
+    margin: 0.5rem 0 !important;
+  }
+
+  .ticketLabel, .ticketValue {
+    color: #000000 !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* Sembunyikan butang semasa cetakan keluar */
+  .ticketActions, .ticketNote {
+    display: none !important;
+  }
+}

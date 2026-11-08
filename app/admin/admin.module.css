@@ -1,0 +1,603 @@
+.container {
+  min-height: 100vh;
+  background-color: #0b1120;
+  color: #f8fafc;
+  padding: 1.5rem 2rem;
+  font-family: inherit;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #38bdf8;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.adminRoleBadge {
+  font-size: 0.75rem;
+  background-color: #0284c7;
+  color: #ffffff;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-left: 0.5rem;
+}
+
+.tabBar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.tabBtn {
+  background-color: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: all 0.2s;
+}
+
+.tabBtnActive {
+  background-color: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+}
+
+.subTabBar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  background-color: #0f172a;
+  padding: 0.35rem;
+  border-radius: 0.6rem;
+  width: fit-content;
+  border: 1px solid #1e293b;
+}
+
+.subTabBtn {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.15s;
+}
+
+.subTabBtnActive {
+  background-color: #1e293b;
+  color: #ffffff;
+}
+
+.subTabMasukActive {
+  background-color: #064e3b;
+  color: #34d399;
+}
+
+.subTabKeluarActive {
+  background-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.statCard {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.statLabel {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.statValue {
+  font-size: 1.75rem;
+  font-weight: 400;
+}
+
+.cardPanel {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.panelTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tableHeaderActionRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.searchBar {
+  width: 100%;
+  max-width: 350px;
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  color: #ffffff;
+  font-size: 0.85rem;
+  outline: none;
+  font-weight: 400;
+}
+
+.searchBar:focus {
+  border-color: #38bdf8;
+}
+
+.btnAction {
+  background-color: #10b981;
+  color: #022c22;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.btnAction:hover {
+  background-color: #059669;
+}
+
+/* Butang Padam Pukal */
+.btnBulkDelete {
+  background-color: #991b1b;
+  color: #ffffff;
+  font-weight: 700;
+  border: 1px solid #b91c1c;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  transition: background-color 0.15s;
+}
+
+.btnBulkDelete:hover {
+  background-color: #dc2626;
+}
+
+.tableCheckbox {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #0284c7;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.stockFormGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.inputField, .selectField {
+  width: 100%;
+  background-color: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 400;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.inputField:focus, .selectField:focus {
+  border-color: #38bdf8;
+}
+
+.actionGroup {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.btnEdit {
+  background-color: #0369a1;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btnHistory {
+  background-color: #065f46;
+  color: #6ee7b7;
+  border: none;
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btnDelete {
+  background-color: #991b1b;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.table th {
+  background-color: #1e293b;
+  color: #94a3b8;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  border-bottom: 1px solid #334155;
+}
+
+.table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #1e293b;
+  color: #cbd5e1;
+  font-weight: 400;
+}
+
+.table tr:hover {
+  background-color: #162032;
+}
+
+.colCenter {
+  text-align: center;
+}
+
+.tableFooterRow {
+  background-color: #0f172a;
+  border-top: 2px solid #334155;
+}
+
+.tableFooterRow td {
+  padding: 0.85rem 1rem;
+  font-weight: 400;
+}
+
+.summaryTotalBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  width: fit-content;
+  margin-left: auto;
+}
+
+.summaryRowMini {
+  display: flex;
+  justify-content: space-between;
+  width: 280px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.summaryRowTotal {
+  display: flex;
+  justify-content: space-between;
+  width: 280px;
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: #34d399;
+  border-top: 1px dashed #334155;
+  padding-top: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.badgeLow {
+  background-color: #7f1d1d;
+  color: #fca5a5;
+  border: 1px solid #b91c1c;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.badgeOk {
+  background-color: #064e3b;
+  color: #6ee7b7;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.badgeMethod {
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.methodCash {
+  background-color: #374151;
+  color: #f3f4f6;
+}
+
+.methodQR {
+  background-color: #064e3b;
+  color: #34d399;
+}
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+  z-index: 50;
+  overflow-y: auto;
+}
+
+.modalContent {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 1rem;
+  width: 100%;
+  max-width: 600px;
+  padding: 1.75rem;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.modalTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin: 0;
+}
+
+.formGridModal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.formGroupFull {
+  grid-column: span 2;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.btnCancel {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.timelineItem {
+  border-left: 2px solid #0284c7;
+  padding-left: 1rem;
+  margin-bottom: 1.25rem;
+  position: relative;
+}
+
+.timelineDot {
+  position: absolute;
+  left: -6px;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #38bdf8;
+}
+
+.printHeaderInfo {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1.2cm 1.5cm;
+  }
+
+  :global(body) {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .container {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    padding: 0 !important;
+  }
+
+  .container button,
+  .noPrint,
+  .tabBar,
+  .subTabBar,
+  .stockFormGrid,
+  .actionGroup,
+  .modalOverlay,
+  .searchBar,
+  .tableCheckbox {
+    display: none !important;
+  }
+
+  .printHeaderInfo {
+    display: block !important;
+    border-bottom: 2px solid #0f172a !important;
+    padding-bottom: 0.75rem !important;
+    margin-bottom: 1.25rem !important;
+  }
+
+  .printClinicTitle {
+    font-size: 1.4rem !important;
+    font-weight: 800 !important;
+    color: #065f46 !important;
+    text-transform: uppercase !important;
+  }
+
+  .printReportTitle {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+  }
+
+  .printMeta {
+    font-size: 0.8rem !important;
+    color: #64748b !important;
+  }
+
+  .header {
+    display: none !important;
+  }
+
+  .statsGrid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.6rem !important;
+    margin-bottom: 1.25rem !important;
+  }
+
+  .statCard {
+    background-color: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 0.6rem 0.75rem !important;
+  }
+
+  .cardPanel {
+    background-color: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .tableWrapper {
+    border: 1px solid #94a3b8 !important;
+  }
+
+  .table {
+    width: 100% !important;
+    font-size: 8.5pt !important;
+    color: #0f172a !important;
+  }
+
+  .table th {
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
+    font-weight: 700 !important;
+  }
+
+  .table td {
+    color: #1e293b !important;
+  }
+
+  .tableFooterRow {
+    background-color: #f8fafc !important;
+  }
+}

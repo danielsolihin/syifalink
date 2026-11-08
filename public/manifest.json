@@ -1,0 +1,22 @@
+{
+  "name": "SyifaLink - Pengurusan Rawatan Islam",
+  "short_name": "SyifaLink",
+  "description": "Sistem Pengurusan Rawatan Ruqyah, Farmasi, TV & Giliran Pintar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0284c7",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

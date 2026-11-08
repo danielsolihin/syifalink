@@ -1,0 +1,408 @@
+.container {
+  min-height: 100vh;
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 1.5rem;
+  font-family: inherit;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 1rem;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #f59e0b; /* Amber Gold */
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badgeLive {
+  background-color: #451a03;
+  color: #fcd34d;
+  border: 1px solid #b45309;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.gridOrders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.orderCard {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.2s;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.patientName {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin: 0;
+}
+
+.patientIC {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0.2rem 0 0 0;
+}
+
+.tagBungkus {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.4rem;
+  text-transform: uppercase;
+}
+
+.tagKuning {
+  background-color: #78350f;
+  color: #fde68a;
+  border: 1px solid #d97706;
+}
+
+.tagHijau {
+  background-color: #064e3b;
+  color: #a7f3d0;
+  border: 1px solid #059669;
+}
+
+.itemList {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.itemRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  background-color: #0f172a;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.cardFooter {
+  border-top: 1px dashed #334155;
+  padding-top: 0.75rem;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.totalLabel {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.totalAmount {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #34d399;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btnPack {
+  flex: 1;
+  background-color: #d97706;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btnPack:hover {
+  background-color: #b45309;
+}
+
+.btnPay {
+  flex: 1;
+  background-color: #10b981;
+  color: #022c22;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btnPay:hover {
+  background-color: #059669;
+}
+
+/* --- Modal Pembayaran --- */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.modalContent {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 1rem;
+  width: 100%;
+  max-width: 400px;
+  padding: 1.75rem;
+  text-align: center;
+}
+
+.qrPlaceholder {
+  background-color: #ffffff;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin: 1.25rem auto;
+  width: 180px;
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: #0f172a;
+}
+/* --- Butang Cetak Resit --- */
+.btnPrintReceipt {
+  background-color: #10b981;
+  color: #022c22;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+/* Format Cetakan Resit Rasmi Kaunter Farmasi */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .printReceiptArea, .printReceiptArea * {
+    visibility: visible;
+  }
+
+  .printReceiptArea {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 58mm !important;
+    margin: 0 !important;
+    padding: 6px !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    font-family: 'Courier New', Courier, monospace !important;
+  }
+
+  .noPrint {
+    display: none !important;
+  }
+}
+/* --- Butang Cetak Sijil MC pada Kad --- */
+.btnMC {
+  background-color: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  transition: background-color 0.2s;
+}
+
+.btnMC:hover {
+  background-color: #0369a1;
+}
+
+/* --- Susun Atur Dokumen Sijil Perakuan Cuti Sakit (MC) --- */
+.mcOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+  z-index: 60;
+  overflow-y: auto;
+}
+
+.mcDocument {
+  background-color: #ffffff;
+  color: #0f172a;
+  width: 100%;
+  max-width: 650px;
+  border-radius: 0.75rem;
+  padding: 2.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border: 2px solid #cbd5e1;
+  position: relative;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.mcHeader {
+  text-align: center;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.mcClinicTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #065f46;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mcClinicSub {
+  font-size: 0.85rem;
+  color: #475569;
+  margin: 0.25rem 0 0 0;
+  font-family: sans-serif;
+}
+
+.mcDocTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-decoration: underline;
+  margin: 1.25rem 0 0.5rem 0;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+.mcBodyText {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #1e293b;
+  margin-bottom: 1.5rem;
+  text-align: justify;
+}
+
+.mcHighlight {
+  font-weight: 700;
+  color: #0f172a;
+  border-bottom: 1px dotted #64748b;
+  padding: 0 0.25rem;
+}
+
+.mcSignatureGrid {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3rem;
+  font-family: sans-serif;
+}
+
+.mcSignatureBox {
+  text-align: center;
+  width: 220px;
+}
+
+.mcSignatureLine {
+  border-bottom: 1px solid #0f172a;
+  margin-top: 3.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.mcFooterNote {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: center;
+  margin-top: 2rem;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 0.75rem;
+  font-family: sans-serif;
+}
+
+/* Format Cetakan Kertas Sijil MC (A4 / A5) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .mcDocument, .mcDocument * {
+    visibility: visible;
+  }
+
+  .mcDocument {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 2cm !important;
+  }
+
+  .noPrint {
+    display: none !important;
+  }
+}
