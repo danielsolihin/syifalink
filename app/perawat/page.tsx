@@ -308,7 +308,7 @@ export default function KonsolPerawat() {
         })
         .eq('perawat_semasa_id', ustazSemasa.id);
 
-      const formatSesiDB = sesiDipilih === 'Sesi Malam' ? 'malam' : 'pagi';
+      const formatSesiDB = (sesiDipilih as string) === 'Sesi Malam' ? 'malam' : 'pagi';
 
       const { error } = await supabase
         .from('bilik_rawatan')
