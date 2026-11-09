@@ -198,7 +198,6 @@ export default function KonsolPerawat() {
     if (!ustazSemasa) return;
 
     try {
-      // Ambil pesakit aktif ustaz ini (status dipanggil atau sedang merawat)
       const { data: senaraiAktif } = await supabase
         .from('giliran')
         .select('*, pesakit(id, nama, no_ic, no_telefon, alamat)')
@@ -216,7 +215,6 @@ export default function KonsolPerawat() {
         setPesakitAktif(null);
       }
 
-      // Ambil senarai perawat yang sedang check-in di bilik
       const { data: bilikAktif } = await supabase
         .from('bilik_rawatan')
         .select('perawat_semasa_id')
@@ -226,7 +224,6 @@ export default function KonsolPerawat() {
         ?.map((b) => b.perawat_semasa_id)
         .filter(Boolean) as string[];
 
-      // Ambil semua pesakit berstatus menunggu
       const { data: semuaMenunggu } = await supabase
         .from('giliran')
         .select('*, pesakit(id, nama, no_ic, no_telefon, alamat)')
@@ -311,7 +308,7 @@ export default function KonsolPerawat() {
         })
         .eq('perawat_semasa_id', ustazSemasa.id);
 
-      const formatSesiDB = sesiDipilih === 'Sesi Malam' || sesiDipilih === 'malam' ? 'malam' : 'pagi';
+      const formatSesiDB = sesiDipilih === 'Sesi Malam' ? 'malam' : 'pagi';
 
       const { error } = await supabase
         .from('bilik_rawatan')
@@ -367,7 +364,7 @@ export default function KonsolPerawat() {
     }
   };
 
-  // 10. Panggil Pesakit Seterusnya (Status Awal: 'dipanggil')
+  // 10. Panggil Pesakit Seterusnya
   const panggilPesakitSeterusnya = async () => {
     if (!ustazSemasa || !bilikSemasa) {
       alert('Sila daftar masuk bilik rawatan terlebih dahulu.');
@@ -381,7 +378,6 @@ export default function KonsolPerawat() {
 
     setMemproses(true);
     try {
-      // Selesaikan sebarang rekod lama yang tergantung jika ada
       await supabase
         .from('giliran')
         .update({ status: 'selesai' })
@@ -415,7 +411,6 @@ export default function KonsolPerawat() {
         perawat_id: ustazSemasa.id
       });
 
-      // Reset borang rawatan
       setReaksiDipilih([]);
       setUbatDipilih([]);
       setCatatanRawatan('');
@@ -432,7 +427,7 @@ export default function KonsolPerawat() {
     }
   };
 
-  // 11. Tukar Status ke "Sedang Merawat" (Berasaskan Butang atau Tindakan Pintar)
+  // 11. Mula Rawatan
   const mulakanRawatan = async () => {
     if (!pesakitAktif || pesakitAktif.status === 'sedang_rawat') return;
 
@@ -491,9 +486,8 @@ export default function KonsolPerawat() {
     }
   };
 
-  // 12. Pengendalian Reaksi Ruqyah & Pemicu Auto-Rawatan
+  // 12. Pengendalian Reaksi
   const toggleReaksi = (reaksi: string) => {
-    // Tukar status secara automatik ke 'sedang_rawat' jika masih 'dipanggil'
     if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
       mulakanRawatan();
     }
@@ -523,7 +517,7 @@ export default function KonsolPerawat() {
     setBukaInputTambahan(false);
   };
 
-  // 13. Pengurusan Ubat Dipilih & Pemicu Auto-Rawatan
+  // 13. Pengurusan Ubat Dipilih
   const tambahItemUbat = (bahan: BahanPenawar) => {
     if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
       mulakanRawatan();
@@ -554,7 +548,6 @@ export default function KonsolPerawat() {
 
     setMemproses(true);
     try {
-      // 1. Simpan rekod sesi rawatan (Kalis schema database)
       const dataSesi: any = {
         pesakit_id: pesakitAktif.pesakit_id,
         perawat_id: ustazSemasa.id,
@@ -569,7 +562,6 @@ export default function KonsolPerawat() {
       const { error: errSesi } = await supabase.from('sesi_rawatan').insert(dataSesi);
 
       if (errSesi) {
-        // Sandaran jika terdapat kolum catatan_rawatan yang belum wujud
         await supabase.from('sesi_rawatan').insert({
           pesakit_id: pesakitAktif.pesakit_id,
           perawat_id: ustazSemasa.id,
@@ -577,7 +569,6 @@ export default function KonsolPerawat() {
         });
       }
 
-      // 2. Kemas kini status giliran ke farmasi (tanpa medan updated_at jika tiada kolum tersebut)
       const { error: errGiliran } = await supabase
         .from('giliran')
         .update({
@@ -643,7 +634,6 @@ export default function KonsolPerawat() {
       </header>
 
       <main className={styles.mainContent}>
-        {/* KEADAAN 1: BELUM CHECK-IN */}
         {!bilikSemasa ? (
           <div className={styles.checkInCard}>
             <div className={styles.checkInIconWrapper}>
@@ -706,7 +696,6 @@ export default function KonsolPerawat() {
             </button>
           </div>
         ) : (
-          /* KEADAAN 2: SUDAH CHECK-IN */
           <>
             <div className={styles.activeDutyBanner}>
               <div>
@@ -756,7 +745,6 @@ export default function KonsolPerawat() {
                     </div>
 
                     <div className={styles.patientActionButtons}>
-                      {/* BUTANG STATUS PINTAR: MULA RAWATAN / SEDANG MERAWAT */}
                       {pesakitAktif.status === 'dipanggil' ? (
                         <button
                           type="button"
@@ -830,7 +818,6 @@ export default function KonsolPerawat() {
 
                 {/* BORANG DIAGNOSTIK & RAWATAN */}
                 <div className={styles.diagnosticGrid}>
-                  {/* BAHAGIAN 1: REAKSI RUQYAH + BUTANG MAKLUMAT TAMBAHAN */}
                   <div className={styles.diagCard}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
                       <h3 className={styles.sectionTitle} style={{ margin: 0 }}>
@@ -858,7 +845,6 @@ export default function KonsolPerawat() {
                       </button>
                     </div>
 
-                    {/* RUANGAN INPUT JIKA MAKLUMAT TAMBAHAN DIKLIK */}
                     {bukaInputTambahan && (
                       <div style={{
                         display: 'flex',
@@ -910,7 +896,6 @@ export default function KonsolPerawat() {
                       </div>
                     )}
 
-                    {/* SENARAI TAG REAKSI RUQYAH GRID RESPONSIF */}
                     <div className={styles.chipsContainer}>
                       {senaraiReaksiDB.map((reaksi) => {
                         const dipilih = reaksiDipilih.includes(reaksi);
@@ -932,7 +917,6 @@ export default function KonsolPerawat() {
                     </div>
                   </div>
 
-                  {/* BAHAGIAN 2: PENAWAR & UBAT */}
                   <div className={styles.diagCard}>
                     <h3 className={styles.sectionTitle}>
                       <Pill size={18} color="#34d399" /> 2. Penawar / Ubat Diberikan
@@ -983,7 +967,6 @@ export default function KonsolPerawat() {
                     </div>
                   </div>
 
-                  {/* BAHAGIAN 3: CATATAN RAWATAN */}
                   <div className={styles.diagCard}>
                     <h3 className={styles.sectionTitle}>
                       <FileText size={18} color="#fbbf24" /> 3. Catatan Diagnostik & Amalan
@@ -1007,7 +990,6 @@ export default function KonsolPerawat() {
                     />
                   </div>
 
-                  {/* BAHAGIAN 4: SIJIL CUTI SAKIT (MC) */}
                   <div className={styles.diagCard}>
                     <h3 className={styles.sectionTitle}>
                       <Calendar size={18} color="#a855f7" /> 4. Sijil Cuti Sakit (MC)
@@ -1046,7 +1028,6 @@ export default function KonsolPerawat() {
                   </div>
                 </div>
 
-                {/* BAR TERAPUNG PENGHANTARAN */}
                 <div className={styles.bottomBarSubmit}>
                   <div>
                     <span className={styles.summaryLabel}>Jumlah Penawar:</span>
