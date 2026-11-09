@@ -436,7 +436,6 @@ export default function SkrinTVDewan() {
         v.name.toLowerCase().includes('indonesia')
       );
 
-      // Elakkan sama sekali suara robot English
       if (!suaraNusantara) {
         return;
       }
@@ -474,7 +473,6 @@ export default function SkrinTVDewan() {
         if (!dimainkan) {
           try {
             const directAudio = new Audio();
-            directAudio.referrerPolicy = 'no-referrer';
             directAudio.src = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(teks)}&tl=ms&client=tw-ob`;
             directAudio.volume = 1.0;
             directAudio.play().catch(() => {
@@ -823,7 +821,7 @@ export default function SkrinTVDewan() {
           {/* BARIS 2 KIRI: PEMAIN VIDEO TERAPUNG */}
           <div style={{
             height: '100%',
-            minHeight: '150px',
+            minHeight: '220px',
             backgroundColor: '#ffffff',
             borderRadius: '1.25rem',
             overflow: 'hidden',
