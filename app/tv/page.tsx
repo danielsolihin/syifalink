@@ -63,6 +63,7 @@ export default function SkrinTVDewan() {
   const [videoSemasa, setVideoSemasa] = useState<ItemVideo | null>(null);
 
   const panggilanTerkiniRef = useRef<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const audioChimeRef = useRef<HTMLAudioElement | null>(null);
   const audioTtsRef = useRef<HTMLAudioElement | null>(null);
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
@@ -109,9 +110,21 @@ export default function SkrinTVDewan() {
     } catch (e) {}
   };
 
-  // 1. Skrin Penuh & Kebenaran Audio
+  // 1. Skrin Penuh & Buka Kunci Audio Kekal
   const aktifkanSkrinPenuhDanAudio = () => {
     setAudioDibenarkan(true);
+
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioCtx();
+        }
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
+      }
+    } catch (e) {}
 
     if (audioChimeRef.current) {
       audioChimeRef.current.play().then(() => {
@@ -337,7 +350,7 @@ export default function SkrinTVDewan() {
     }
   }, [videoSemasa]);
 
-  // Audio Ducking
+  // Redakan audio video semasa panggilan
   const redakanAudioVideoLatar = () => {
     if (videoPlayerRef.current) {
       videoPlayerRef.current.muted = true;
@@ -365,7 +378,7 @@ export default function SkrinTVDewan() {
           '*'
         );
       }
-    }, 10000);
+    }, 11000);
   };
 
   const janaYouTubeEmbedUrl = (url: string, loop: boolean) => {
@@ -424,6 +437,7 @@ export default function SkrinTVDewan() {
     return `Nombor giliran, ${abjad}, ${digitDieja}. Sila masuk ke ${bilik}, bersama ${namaPerawat}.`;
   };
 
+  // Sandaran Web Speech: Hanya jika pek suara Melayu/Indonesia wujud
   const mainkanWebSpeechJikaAda = (teks: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     try {
@@ -436,6 +450,7 @@ export default function SkrinTVDewan() {
         v.name.toLowerCase().includes('indonesia')
       );
 
+      // Elakkan suara robot Inggeris jika peranti tiada pek bahasa Melayu
       if (!suaraNusantara) {
         return;
       }
@@ -498,10 +513,10 @@ export default function SkrinTVDewan() {
   };
 
   const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
-    // 1. Redakan audio video latar
+    // 1. Redakan video latar belakang
     redakanAudioVideoLatar();
 
-    // 2. Mainkan fail loceng chime rasmi sahaja
+    // 2. Mainkan loceng chime rasmi sahaja
     mainkanChimeStudio();
 
     const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
