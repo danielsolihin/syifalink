@@ -328,7 +328,6 @@ export default function SkrinTVDewan() {
     }
   }, [videoSemasa]);
 
-  // Redakan & Pulihkan Audio Video Latar
   const redakanAudioVideoLatar = () => {
     if (videoPlayerRef.current) {
       videoPlayerRef.current.muted = true;
@@ -379,10 +378,11 @@ export default function SkrinTVDewan() {
   };
 
   // ========================================================
-  // 7. SISTEM PEMAIN CHUNK MP3 PERKATAAN DEMI PERKATAAN
+  // 7. SISTEM CHUNK AUDIO MP3: SETIAP PERKATAAN SATU CHUNK
   // ========================================================
-  const binaSenaraiChunkPanggilan = (noGiliran: string, bilik: string, namaPerawat: string): string[] => {
+  const binaSlotsPanggilan = (noGiliran: string, bilik: string, namaPerawat: string): string[][] => {
     const abjad = noGiliran.charAt(0).toUpperCase();
+    const lowerAbjad = abjad.toLowerCase();
     const nomborBahagian = noGiliran.replace(/^[A-Za-z]+[-_\s]*/, '');
 
     const sebutanDigit: { [key: string]: string } = {
@@ -398,119 +398,166 @@ export default function SkrinTVDewan() {
       '9': 'sembilan'
     };
 
-    const digitChunks = nomborBahagian
-      .split('')
-      .map((d) => sebutanDigit[d] || d);
+    const digits = nomborBahagian.split('');
+    const roomMatch = bilik.match(/\d+/);
+    const roomNum = roomMatch ? roomMatch[0] : '';
+    const roomWord = sebutanDigit[roomNum] || roomNum;
 
-    const sebutanBilik = bilik
-      .replace(/\b1\b/g, 'satu')
-      .replace(/\b2\b/g, 'dua')
-      .replace(/\b3\b/g, 'tiga')
-      .replace(/\b4\b/g, 'empat')
-      .replace(/\b5\b/g, 'lima')
-      .replace(/\b6\b/g, 'enam')
-      .replace(/\b7\b/g, 'tujuh')
-      .replace(/\b8\b/g, 'lapan')
-      .replace(/\b9\b/g, 'sembilan');
+    const slots: string[][] = [];
 
-    const chunks: string[] = [
-      'Nombor giliran',
-      abjad,
-      ...digitChunks,
-      'Sila masuk ke',
-      sebutanBilik
-    ];
+    // Slot 1: "Nombor giliran"
+    slots.push([
+      '/sounds/nombor-giliran.mp3',
+      '/sounds/nombor_giliran.mp3',
+      '/sounds/nombor.mp3',
+      '/api/tts?text=Nombor+giliran'
+    ]);
 
-    if (namaPerawat && !namaPerawat.toLowerCase().includes('tabib bertugas')) {
-      chunks.push(`bersama ${namaPerawat}`);
+    // Slot 2: Huruf abjad (cth: K)
+    slots.push([
+      `/sounds/${abjad}.mp3`,
+      `/sounds/${lowerAbjad}.mp3`,
+      `/sounds/huruf-${lowerAbjad}.mp3`,
+      `/api/tts?text=${abjad}`
+    ]);
+
+    // Slot 3+: Setiap Digit (cth: 0, 0, 3)
+    digits.forEach((d) => {
+      const perkataanDigit = sebutanDigit[d] || d;
+      slots.push([
+        `/sounds/${d}.mp3`,
+        `/sounds/${perkataanDigit}.mp3`,
+        `/api/tts?text=${encodeURIComponent(perkataanDigit)}`
+      ]);
+    });
+
+    // Slot: "Sila masuk ke"
+    slots.push([
+      '/sounds/sila-masuk-ke.mp3',
+      '/sounds/sila_masuk_ke.mp3',
+      '/sounds/sila-masuk.mp3',
+      '/sounds/sila-ke.mp3',
+      '/api/tts?text=Sila+masuk+ke'
+    ]);
+
+    // Slot: Bilik
+    slots.push([
+      '/sounds/bilik.mp3',
+      `/sounds/bilik-${roomNum}.mp3`,
+      `/api/tts?text=Bilik`
+    ]);
+
+    // Slot: Nombor Bilik
+    if (roomNum) {
+      slots.push([
+        `/sounds/${roomNum}.mp3`,
+        `/sounds/${roomWord}.mp3`,
+        `/api/tts?text=${encodeURIComponent(roomWord)}`
+      ]);
     }
 
-    return chunks;
+    // Slot: Nama Perawat (pilihan jika bukan default)
+    if (namaPerawat && !namaPerawat.toLowerCase().includes('tabib bertugas')) {
+      slots.push([
+        `/api/tts?text=${encodeURIComponent('bersama ' + namaPerawat)}`
+      ]);
+    }
+
+    return slots;
   };
 
-  // Mainkan senarai chunk audio secara berantai (Chain Queue)
-  const mainkanSenaraiChunk = (senarai: string[], onSelesai: () => void) => {
-    if (!audioTtsRef.current || senarai.length === 0) {
+  // Mainkan senarai slot chunk satu demi satu dengan sokongan sandaran automatik
+  const mainkanUrutanSlots = (slots: string[][], onSelesai: () => void) => {
+    if (!audioTtsRef.current || slots.length === 0) {
       onSelesai();
       return;
     }
 
     const audioEl = audioTtsRef.current;
-    let idx = 0;
+    let slotIndex = 0;
 
-    const mainkanSeterusnya = () => {
-      if (idx >= senarai.length) {
+    const mainkanSlotSemasa = () => {
+      if (slotIndex >= slots.length) {
         audioEl.onended = null;
         audioEl.onerror = null;
         onSelesai();
         return;
       }
 
-      const perkataan = senarai[idx];
-      idx += 1;
+      const senaraiPilihan = slots[slotIndex];
+      slotIndex++;
 
-      // Setiap perkataan pendek dipanggil terus ke fail audio MP3
-      const urlChunkMp3 = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(perkataan)}&tl=ms&client=tw-ob`;
+      let pilihanIndex = 0;
 
-      audioEl.src = urlChunkMp3;
-      audioEl.volume = 1.0;
+      const cubaPilihan = () => {
+        if (pilihanIndex >= senaraiPilihan.length) {
+          // Jika semua calon untuk slot ini gagal, terus ke slot seterusnya
+          setTimeout(mainkanSlotSemasa, 50);
+          return;
+        }
 
-      audioEl.onended = () => {
-        // Jeda kecil 120ms antara perkataan agar sebutan berbunyi semulajadi
-        setTimeout(mainkanSeterusnya, 120);
+        const urlAudio = senaraiPilihan[pilihanIndex];
+        pilihanIndex++;
+
+        audioEl.onended = () => {
+          // Jeda semulajadi 90ms antara perkataan
+          setTimeout(mainkanSlotSemasa, 90);
+        };
+
+        audioEl.onerror = () => {
+          // Jika fail MP3 404, cuba calon seterusnya dalam slot ini
+          cubaPilihan();
+        };
+
+        audioEl.src = urlAudio;
+        audioEl.volume = 1.0;
+
+        const p = audioEl.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            cubaPilihan();
+          });
+        }
       };
 
-      audioEl.onerror = () => {
-        console.warn(`Ralat chunk MP3 "${perkataan}", meneruskan ke chunk seterusnya.`);
-        setTimeout(mainkanSeterusnya, 200);
-      };
-
-      const p = audioEl.play();
-      if (p !== undefined) {
-        p.catch((e) => {
-          console.warn(`Gagal memainkan chunk "${perkataan}":`, e);
-          setTimeout(mainkanSeterusnya, 250);
-        });
-      }
+      cubaPilihan();
     };
 
-    mainkanSeterusnya();
+    mainkanSlotSemasa();
   };
 
   const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
-    // 1. Redakan audio video siaran TV
     redakanAudioVideoLatar();
 
-    const senaraiChunk = binaSenaraiChunkPanggilan(noGiliran, bilik, namaPerawat);
+    const slots = binaSlotsPanggilan(noGiliran, bilik, namaPerawat);
 
-    let sudahMulaChunk = false;
-    const jalankanPanggilanChunk = () => {
-      if (sudahMulaChunk) return;
-      sudahMulaChunk = true;
-      mainkanSenaraiChunk(senaraiChunk, () => {
+    let sudahMula = false;
+    const mulaUrutanPanggilan = () => {
+      if (sudahMula) return;
+      sudahMula = true;
+      mainkanUrutanSlots(slots, () => {
         pulihkanAudioVideoLatar();
       });
     };
 
-    // 2. Mainkan loceng rasmi chime.mp3 terlebih dahulu
+    // 1. Mainkan fail loceng chime.mp3 dahulu
     if (audioChimeRef.current) {
       audioChimeRef.current.currentTime = 0;
       audioChimeRef.current.onended = () => {
-        // Selepas bunyi loceng tamat, tunggu 350ms sebelum memulakan sebutan perkataan
-        setTimeout(jalankanPanggilanChunk, 350);
+        setTimeout(mulaUrutanPanggilan, 250);
       };
 
       const playChime = audioChimeRef.current.play();
       if (playChime !== undefined) {
         playChime.catch(() => {
-          setTimeout(jalankanPanggilanChunk, 400);
+          setTimeout(mulaUrutanPanggilan, 350);
         });
       }
 
-      // Sandaran keselamatan jika acara onended tidak dipicu oleh pelayar TV
-      setTimeout(jalankanPanggilanChunk, 2600);
+      // Sandaran masa jika acara onended terhalang di TV
+      setTimeout(mulaUrutanPanggilan, 2600);
     } else {
-      jalankanPanggilanChunk();
+      mulaUrutanPanggilan();
     }
   };
 
