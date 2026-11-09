@@ -141,7 +141,9 @@ export default function PapanPemukaAdmin() {
   // Data Kawalan Bilik Rawatan
   const [senaraiBilik, setSenaraiBilik] = useState<BilikRawatanAdmin[]>([]);
   const [bukaModalBilik, setBukaModalBilik] = useState(false);
+  const [bilikDiedit, setBilikDiedit] = useState<BilikRawatanAdmin | null>(null);
   const [formNamaBilik, setFormNamaBilik] = useState('');
+  const [selectedBilik, setSelectedBilik] = useState<number[]>([]);
 
   // Data Siaran Video TV
   const [senaraiVideo, setSenaraiVideo] = useState<VideoTV[]>([]);
@@ -468,7 +470,52 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // D. Tindakan Kawalan Bilik Rawatan
+  // D. Tindakan Kawalan Bilik Rawatan (Bebas Dialog Sekatan Pelayar)
+  const toggleSelectAllBilik = () => {
+    if (selectedBilik.length === senaraiBilik.length) {
+      setSelectedBilik([]);
+    } else {
+      setSelectedBilik(senaraiBilik.map((b) => b.id));
+    }
+  };
+
+  const toggleSelectBilik = (id: number) => {
+    setSelectedBilik((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // PADAM PUKAL BILIK RAWATAN: TERUS BERFUNGSI TANPA DIALOG POP-UP
+  const padamBilikPukal = async () => {
+    if (selectedBilik.length === 0) return;
+    setMemproses(true);
+    try {
+      const { error } = await supabase.from('bilik_rawatan').delete().in('id', selectedBilik);
+      if (error) throw error;
+      setSelectedBilik([]);
+      await muatDataBilik();
+    } catch (err: any) {
+      alert('Ralat memadam bilik: ' + err.message);
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  // PADAM SATU BILIK RAWATAN: TERUS BERFUNGSI TANPA DIALOG POP-UP
+  const tanganiPadamSatuBilik = async (id: number) => {
+    setMemproses(true);
+    try {
+      const { error } = await supabase.from('bilik_rawatan').delete().eq('id', id);
+      if (error) throw error;
+      setSelectedBilik((prev) => prev.filter((item) => item !== id));
+      await muatDataBilik();
+    } catch (err: any) {
+      alert('Ralat memadam bilik: ' + err.message);
+    } finally {
+      setMemproses(false);
+    }
+  };
+
   const kosongkanBilik = async (id: number) => {
     setMemproses(true);
     try {
@@ -496,19 +543,38 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  const simpanBilikBaharu = async (e: React.FormEvent) => {
+  const simpanBilik = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formNamaBilik.trim()) return;
     setMemproses(true);
     try {
-      await supabase.from('bilik_rawatan').insert({
-        nama_bilik: formNamaBilik.trim(),
-        status: 'kosong',
-        status_aktif: true
-      });
+      if (bilikDiedit) {
+        const { error } = await supabase
+          .from('bilik_rawatan')
+          .update({
+            nama_bilik: formNamaBilik.trim()
+          })
+          .eq('id', bilikDiedit.id);
+
+        if (error) throw error;
+        alert('Bilik rawatan berjaya dikemaskini!');
+      } else {
+        const { error } = await supabase.from('bilik_rawatan').insert({
+          nama_bilik: formNamaBilik.trim(),
+          status: 'kosong',
+          status_aktif: true
+        });
+
+        if (error) throw error;
+        alert('Bilik rawatan baharu didaftarkan!');
+      }
+
       setBukaModalBilik(false);
+      setBilikDiedit(null);
       setFormNamaBilik('');
       muatDataBilik();
+    } catch (err: any) {
+      alert('Ralat: ' + err.message);
     } finally {
       setMemproses(false);
     }
@@ -1219,6 +1285,7 @@ export default function PapanPemukaAdmin() {
                     <td>{p.no_ic}</td>
                     <td>{p.no_telefon}</td>
                     <td>{p.alamat || <span style={{ color: '#64748b' }}>Belum diisi</span>}</td>
+                    <td>{new Date(p.created_at).toLocaleDateString('ms-MY')}</td>
                     <td>
                       <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
                         <button onClick={() => setPesakitDiedit(p)} className={styles.btnEdit}><Edit size={12} /> Edit</button>
@@ -1309,7 +1376,7 @@ export default function PapanPemukaAdmin() {
       )}
 
       {/* ========================================================
-          TAB 5: KAWALAN BILIK RAWATAN (DIPULIHKAN SEPENUHNYA - GAMBAR 2)
+          TAB 5: KAWALAN BILIK RAWATAN (SELECT ALL, EDIT & PADAM KALIS SEKATAN)
          ======================================================== */}
       {tabAktif === 'bilik' && isSuper && (
         <div className={styles.cardPanel}>
@@ -1320,15 +1387,44 @@ export default function PapanPemukaAdmin() {
                 Pantau perawat yang sedang *check-in* di setiap bilik dan lepaskan bilik jika berlaku kekeliruan syif
               </p>
             </div>
-            <button onClick={() => setBukaModalBilik(true)} className={styles.btnAction}>
-              <PlusCircle size={16} /> Tambah Bilik Rawatan
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {selectedBilik.length > 0 && (
+                <button
+                  type="button"
+                  onClick={padamBilikPukal}
+                  disabled={memproses}
+                  className={styles.btnBulkDelete}
+                >
+                  <Trash2 size={15} /> Padam Terpilih ({selectedBilik.length})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setBilikDiedit(null);
+                  setFormNamaBilik('');
+                  setBukaModalBilik(true);
+                }}
+                className={styles.btnAction}
+              >
+                <PlusCircle size={16} /> Tambah Bilik Rawatan
+              </button>
+            </div>
           </div>
 
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      className={styles.tableCheckbox}
+                      checked={senaraiBilik.length > 0 && selectedBilik.length === senaraiBilik.length}
+                      onChange={toggleSelectAllBilik}
+                      title="Pilih Semua Bilik"
+                    />
+                  </th>
                   <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
                   <th>Nama Bilik</th>
                   <th>Tabib Bertugas Semasa</th>
@@ -1341,13 +1437,24 @@ export default function PapanPemukaAdmin() {
               <tbody>
                 {senaraiBilik.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                       Tiada bilik rawatan didaftarkan.
                     </td>
                   </tr>
                 ) : (
                   senaraiBilik.map((b, idx) => (
-                    <tr key={b.id}>
+                    <tr
+                      key={b.id}
+                      style={{ backgroundColor: selectedBilik.includes(b.id) ? 'rgba(2, 132, 199, 0.1)' : undefined }}
+                    >
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          className={styles.tableCheckbox}
+                          checked={selectedBilik.includes(b.id)}
+                          onChange={() => toggleSelectBilik(b.id)}
+                        />
+                      </td>
                       <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
                       <td style={{ color: '#f1f5f9', fontWeight: 700 }}>{b.nama_bilik}</td>
                       <td>
@@ -1385,6 +1492,18 @@ export default function PapanPemukaAdmin() {
                       </td>
                       <td>
                         <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBilikDiedit(b);
+                              setFormNamaBilik(b.nama_bilik);
+                              setBukaModalBilik(true);
+                            }}
+                            className={styles.btnEdit}
+                            style={{ padding: '0.35rem 0.65rem' }}
+                          >
+                            <Edit size={13} /> Edit
+                          </button>
                           {b.perawat_semasa_id && (
                             <button
                               type="button"
@@ -1396,6 +1515,15 @@ export default function PapanPemukaAdmin() {
                               Kosongkan Bilik
                             </button>
                           )}
+                          <button
+                            type="button"
+                            disabled={memproses}
+                            onClick={() => tanganiPadamSatuBilik(b.id)}
+                            className={styles.btnBulkDelete}
+                            style={{ padding: '0.35rem 0.65rem' }}
+                          >
+                            <Trash2 size={13} /> Padam
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1408,7 +1536,7 @@ export default function PapanPemukaAdmin() {
       )}
 
       {/* ========================================================
-          TAB 6: SIARAN VIDEO TV (DENGAN BUTANG EDIT - GAMBAR 3)
+          TAB 6: SIARAN VIDEO TV
          ======================================================== */}
       {tabAktif === 'video' && isSuper && (
         <div className={styles.cardPanel}>
@@ -1505,7 +1633,6 @@ export default function PapanPemukaAdmin() {
                         </span>
                       </td>
                       <td>
-                        {/* BUTANG EDIT & PADAM (GAMBAR 3) */}
                         <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
                           <button
                             type="button"
@@ -1544,7 +1671,7 @@ export default function PapanPemukaAdmin() {
       )}
 
       {/* ========================================================
-          TAB 7: SIARAN TICKER TV (DIPULIHKAN SEPENUHNYA - GAMBAR 4)
+          TAB 7: SIARAN TICKER TV
          ======================================================== */}
       {tabAktif === 'ticker' && isSuper && (
         <div className={styles.cardPanel}>
@@ -1725,7 +1852,7 @@ export default function PapanPemukaAdmin() {
       )}
 
       {/* ========================================================
-          MODAL-MODAL SISTEM (DIPERBAIKI PENUH)
+          MODAL-MODAL SISTEM
          ======================================================== */}
 
       {/* MODAL 1: EDIT PESAKIT */}
@@ -1799,7 +1926,7 @@ export default function PapanPemukaAdmin() {
         </div>
       )}
 
-      {/* MODAL 3: PORTFOLIO PERAWAT (DITAMBAH MEDAN KELAYAKAN & KEPAKARAN - GAMBAR 1) */}
+      {/* MODAL 3: PORTFOLIO PERAWAT */}
       {bukaModalPerawat && perawatDiedit && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent}>
@@ -1821,7 +1948,6 @@ export default function PapanPemukaAdmin() {
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>No. Telefon:</label>
                   <input type="text" placeholder="012-3456789" className={styles.inputField} value={perawatDiedit.no_telefon || ''} onChange={(e) => setPerawatDiedit({ ...perawatDiedit, no_telefon: e.target.value })} />
                 </div>
-                {/* MEDAN KELAYAKAN / KELULUSAN (GAMBAR 1) */}
                 <div className={styles.formGroupFull}>
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Kelayakan / Sijil Tauliah:</label>
                   <input
@@ -1832,7 +1958,6 @@ export default function PapanPemukaAdmin() {
                     onChange={(e) => setPerawatDiedit({ ...perawatDiedit, kelayakan: e.target.value })}
                   />
                 </div>
-                {/* MEDAN KEPAKARAN / BIDANG TUMPUAN (GAMBAR 1) */}
                 <div className={styles.formGroupFull}>
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Bidang Tumpuan / Kepakaran Ruqyah:</label>
                   <input
@@ -1853,15 +1978,24 @@ export default function PapanPemukaAdmin() {
         </div>
       )}
 
-      {/* MODAL 4: TAMBAH BILIK RAWATAN */}
+      {/* MODAL 4: TAMBAH / EDIT BILIK RAWATAN */}
       {bukaModalBilik && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent} style={{ maxWidth: '420px' }}>
             <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>Daftar Bilik Rawatan Baharu</h3>
-              <button onClick={() => setBukaModalBilik(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+              <h3 className={styles.modalTitle}>{bilikDiedit ? 'Kemaskini Bilik Rawatan' : 'Daftar Bilik Rawatan Baharu'}</h3>
+              <button 
+                onClick={() => { 
+                  setBukaModalBilik(false); 
+                  setBilikDiedit(null); 
+                  setFormNamaBilik(''); 
+                }} 
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
             </div>
-            <form onSubmit={simpanBilikBaharu}>
+            <form onSubmit={simpanBilik}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Nama Bilik Fizikal:</label>
@@ -1876,15 +2010,27 @@ export default function PapanPemukaAdmin() {
                 </div>
               </div>
               <div className={styles.modalActions}>
-                <button type="button" onClick={() => setBukaModalBilik(false)} className={styles.btnCancel}>Batal</button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}><PlusCircle size={16} /> Simpan Bilik</button>
+                <button 
+                  type="button" 
+                  onClick={() => { 
+                    setBukaModalBilik(false); 
+                    setBilikDiedit(null); 
+                    setFormNamaBilik(''); 
+                  }} 
+                  className={styles.btnCancel}
+                >
+                  Batal
+                </button>
+                <button type="submit" disabled={memproses} className={styles.btnAction}>
+                  <PlusCircle size={16} /> {bilikDiedit ? 'Simpan Kemaskini' : 'Simpan Bilik'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL 5: TAMBAH / EDIT VIDEO TV (GAMBAR 3) */}
+      {/* MODAL 5: TAMBAH / EDIT VIDEO TV */}
       {bukaModalVideo && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent} style={{ maxWidth: '520px' }}>
@@ -1984,7 +2130,7 @@ export default function PapanPemukaAdmin() {
         </div>
       )}
 
-      {/* MODAL 6: TAMBAH / EDIT TICKER TV (GAMBAR 4) */}
+      {/* MODAL 6: TAMBAH / EDIT TICKER TV */}
       {bukaModalTicker && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent} style={{ maxWidth: '520px' }}>

@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+// app/api/tts/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const text = searchParams.get('text');
@@ -9,25 +10,46 @@ export async function GET(request: Request) {
       return new NextResponse('Parameter text diperlukan', { status: 400 });
     }
 
-    // Panggil enjin suara Bahasa Melayu (ms) berkualiti tinggi
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=ms&client=tw-ob`;
+    const cleanText = text.slice(0, 180);
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    // Senarai endpoint Google TTS rasmi (Bahasa Melayu & sandaran serumpun)
+    const targets = [
+      `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=ms&client=tw-ob`,
+      `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=id&client=tw-ob`
+    ];
+
+    let audioBuffer: ArrayBuffer | null = null;
+
+    for (const url of targets) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Referer': 'https://translate.google.com/',
+            'Accept': 'audio/mpeg, audio/*;q=0.9, */*;q=0.8'
+          },
+          cache: 'no-store'
+        });
+
+        if (res.ok) {
+          audioBuffer = await res.arrayBuffer();
+          break;
+        }
+      } catch (err) {
+        console.error('Percubaan fetch TTS gagal:', err);
       }
-    });
-
-    if (!res.ok) {
-      return new NextResponse('Ralat menjana audio', { status: 500 });
     }
 
-    const audioBuffer = await res.arrayBuffer();
+    if (!audioBuffer) {
+      return new NextResponse('Ralat menjana audio dari pelayan', { status: 502 });
+    }
 
-    return new NextResponse(audioBuffer, {
+    return new Response(audioBuffer, {
+      status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'public, max-age=86400, immutable'
+        'Content-Length': audioBuffer.byteLength.toString(),
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=43200'
       }
     });
   } catch (error: any) {

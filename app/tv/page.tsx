@@ -119,7 +119,7 @@ export default function SkrinTVDewan() {
           audioChimeRef.current.pause();
           audioChimeRef.current.currentTime = 0;
         }
-      }).catch((err) => console.log('Izin chime TV:', err));
+      }).catch(() => {});
     }
 
     if (audioTtsRef.current) {
@@ -136,6 +136,10 @@ export default function SkrinTVDewan() {
       document.documentElement.requestFullscreen().then(() => {
         setIsSkrinPenuh(true);
       }).catch(() => {});
+    }
+
+    if (panggilanTerkini) {
+      panggilSuara(panggilanTerkini.noGiliran, panggilanTerkini.bilik, panggilanTerkini.namaPerawat);
     }
   };
 
@@ -154,6 +158,15 @@ export default function SkrinTVDewan() {
     };
     document.addEventListener('fullscreenchange', semakPerubahanFullscreen);
     return () => document.removeEventListener('fullscreenchange', semakPerubahanFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
   }, []);
 
   // 2. Jam Digital
@@ -228,7 +241,7 @@ export default function SkrinTVDewan() {
     } catch (err) {}
   };
 
-  // 6. PENGURUSAN VIDEO SIARAN TV (YOUTUBE & MP4)
+  // 6. PENGURUSAN VIDEO SIARAN TV
   const muatDataVideo = async () => {
     try {
       const { data } = await supabase
@@ -263,7 +276,6 @@ export default function SkrinTVDewan() {
     };
   }, []);
 
-  // Tangani Video Tamat (Loop vs Random)
   const tanganiVideoTamat = () => {
     if (!videoSemasa || senaraiVideo.length === 0) return;
 
@@ -282,7 +294,6 @@ export default function SkrinTVDewan() {
     }
   };
 
-  // Tangani tamat video YouTube melalui API window message
   useEffect(() => {
     const tanganiMesejYouTube = (event: MessageEvent) => {
       try {
@@ -297,7 +308,7 @@ export default function SkrinTVDewan() {
     return () => window.removeEventListener('message', tanganiMesejYouTube);
   }, [videoSemasa, senaraiVideo]);
 
-  // Selaraskan Kelantangan Video Mengikut Tetapan Admin
+  // Aras Kelantangan Video
   useEffect(() => {
     if (!videoSemasa) return;
     const volPeratus = videoSemasa.kelantangan_audio ?? 20;
@@ -322,7 +333,7 @@ export default function SkrinTVDewan() {
           postCmd('unMute');
           postCmd('setVolume', [volPeratus]);
         }
-      }, 1000);
+      }, 1500);
     }
   }, [videoSemasa]);
 
@@ -354,7 +365,7 @@ export default function SkrinTVDewan() {
           '*'
         );
       }
-    }, 11000);
+    }, 10000);
   };
 
   const janaYouTubeEmbedUrl = (url: string, loop: boolean) => {
@@ -369,25 +380,23 @@ export default function SkrinTVDewan() {
 
     if (!videoId) return url;
 
-    return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&rel=0&playsinline=1&enablejsapi=1${
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&enablejsapi=1${
       loop ? `&loop=1&playlist=${videoId}` : ''
     }`;
   };
 
-  // 7. Audio Loceng Studio & Suara Bahasa Melayu Asal (/api/tts)
+  // 7. SISTEM AUDIO: HANYA LOCENG RASMI (TIADA BUNYI TING-TING-TING BUATAN)
   const mainkanChimeStudio = () => {
     try {
       if (audioChimeRef.current) {
         audioChimeRef.current.currentTime = 0;
-        audioChimeRef.current.play().catch(() => {
-          const chime = new Audio('/sounds/chime.mp3');
-          chime.play().catch(() => {});
+        audioChimeRef.current.play().catch((err) => {
+          console.warn('Ralat memainkan fail chime:', err);
         });
-      } else {
-        const chime = new Audio('/sounds/chime.mp3');
-        chime.play().catch(() => {});
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Ralat Chime Studio:', e);
+    }
   };
 
   const janaTeksSebutanMelayu = (noGiliran: string, bilik: string, namaPerawat: string) => {
@@ -415,33 +424,102 @@ export default function SkrinTVDewan() {
     return `Nombor giliran, ${abjad}, ${digitDieja}. Sila masuk ke ${bilik}, bersama ${namaPerawat}.`;
   };
 
-  const panggilSuara = async (noGiliran: string, bilik: string, namaPerawat: string) => {
-    redakanAudioVideoLatar();
-    mainkanChimeStudio();
-    const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
+  const mainkanWebSpeechJikaAda = (teks: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    try {
+      const senaraiSuara = window.speechSynthesis.getVoices();
+      const suaraNusantara = senaraiSuara.find((v) =>
+        v.lang.toLowerCase().startsWith('ms') ||
+        v.lang.toLowerCase().startsWith('id') ||
+        v.name.toLowerCase().includes('malay') ||
+        v.name.toLowerCase().includes('melayu') ||
+        v.name.toLowerCase().includes('indonesia')
+      );
 
-    setTimeout(() => {
-      try {
-        const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
-        const voiceAudio = new Audio(audioUrl);
-        voiceAudio.volume = 1.0;
-        voiceAudio.play().catch((err) => console.log('Ralat memainkan suara Melayu:', err));
-      } catch (err) {
-        console.error('Ralat TTS:', err);
+      // Elakkan sama sekali suara robot English
+      if (!suaraNusantara) {
+        return;
       }
-    }, 5000);
+
+      window.speechSynthesis.cancel();
+      const sebutan = new SpeechSynthesisUtterance(teks);
+      sebutan.voice = suaraNusantara;
+      sebutan.lang = suaraNusantara.lang;
+      sebutan.rate = 0.88;
+      sebutan.pitch = 1.0;
+      window.speechSynthesis.speak(sebutan);
+    } catch (err) {
+      console.error('Ralat Web Speech:', err);
+    }
   };
 
-  // 8. Muat Data Skrin & Status Bilik Masa Nyata
+  const mainkanAudioMelayu = (teks: string) => {
+    const audioUrl = `/api/tts?text=${encodeURIComponent(teks)}`;
+
+    if (audioTtsRef.current) {
+      const el = audioTtsRef.current;
+      el.volume = 1.0;
+
+      let dimainkan = false;
+
+      const onPlaying = () => {
+        dimainkan = true;
+        el.removeEventListener('playing', onPlaying);
+        el.removeEventListener('error', onError);
+      };
+
+      const onError = () => {
+        el.removeEventListener('playing', onPlaying);
+        el.removeEventListener('error', onError);
+        if (!dimainkan) {
+          try {
+            const directAudio = new Audio();
+            directAudio.referrerPolicy = 'no-referrer';
+            directAudio.src = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(teks)}&tl=ms&client=tw-ob`;
+            directAudio.volume = 1.0;
+            directAudio.play().catch(() => {
+              mainkanWebSpeechJikaAda(teks);
+            });
+          } catch (e) {
+            mainkanWebSpeechJikaAda(teks);
+          }
+        }
+      };
+
+      el.addEventListener('playing', onPlaying);
+      el.addEventListener('error', onError);
+
+      el.src = audioUrl;
+      el.load();
+      el.play().catch(() => {
+        onError();
+      });
+    } else {
+      mainkanWebSpeechJikaAda(teks);
+    }
+  };
+
+  const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
+    // 1. Redakan audio video latar
+    redakanAudioVideoLatar();
+
+    // 2. Mainkan fail loceng chime rasmi sahaja
+    mainkanChimeStudio();
+
+    const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
+
+    // 3. Suara Bahasa Melayu berbunyi selepas bunyi loceng selesai
+    setTimeout(() => {
+      mainkanAudioMelayu(ayatSebutan);
+    }, 2400);
+  };
+
+  // 8. Muat Data Skrin & Status Bilik (Tapisan Bilik Bertugas Aktif)
   const muatDataSkrin = async () => {
     try {
-      const tarikhHariIni = new Date().toISOString().split('T')[0];
-
       const { data: bilikData } = await supabase
         .from('bilik_rawatan')
         .select('*, perawat(id, nama, no_bilik)')
-        .eq('status_aktif', true)
-        .order('susunan_turutan', { ascending: true })
         .order('id', { ascending: true });
 
       const { data: semuaPerawat } = await supabase
@@ -451,41 +529,46 @@ export default function SkrinTVDewan() {
 
       const { data: giliranAktif } = await supabase
         .from('giliran')
-        .select('id, no_giliran, status, perawat_id, perlu_kerusi_roda, created_at, waktu_panggil, pesakit(nama), perawat(id, nama, no_bilik)')
-        .in('status', ['dipanggil', 'sedang_rawat', 'rawatan'])
-        .gte('created_at', `${tarikhHariIni}T00:00:00`);
+        .select('*, pesakit(nama), perawat(id, nama, no_bilik)')
+        .in('status', ['dipanggil', 'sedang_rawat', 'rawatan']);
 
-      if (giliranAktif && giliranAktif.length > 0 && bilikData) {
-        const susunTerbaru = [...giliranAktif].sort((a, b) => {
-          const masaA = new Date(a.waktu_panggil || a.created_at).getTime();
-          const masaB = new Date(b.waktu_panggil || b.created_at).getTime();
+      const senaraiBilikBertugas = bilikData?.filter((b) => b.status_aktif && b.perawat_semasa_id) || [];
+
+      const giliranSah = giliranAktif?.filter((g) => {
+        if (!g.perawat_id) return false;
+        return senaraiBilikBertugas.some((b) => String(b.perawat_semasa_id) === String(g.perawat_id));
+      }) || [];
+
+      if (giliranSah.length > 0) {
+        const susunTerbaru = [...giliranSah].sort((a, b) => {
+          const masaA = new Date(a.waktu_panggil || a.updated_at || a.created_at).getTime();
+          const masaB = new Date(b.waktu_panggil || b.updated_at || b.created_at).getTime();
           return masaB - masaA;
         });
 
         const palingKini = susunTerbaru[0];
-        const tokenPanggilan = `${palingKini.id}_${palingKini.waktu_panggil || palingKini.status}`;
+        const tokenPanggilan = `${palingKini.id}_${palingKini.waktu_panggil || palingKini.status || ''}`;
+
+        const perawatObj = palingKini.perawat as any;
+        const bilikUstaz = senaraiBilikBertugas.find(
+          (b) => String(b.perawat_semasa_id) === String(palingKini.perawat_id)
+        );
+
+        const namaBilikSah = bilikUstaz ? bilikUstaz.nama_bilik : 'Bilik Rawatan';
+
+        const infoPanggilan: InfoPanggilan = {
+          id: palingKini.id,
+          noGiliran: palingKini.no_giliran,
+          namaPesakit: (palingKini.pesakit as any)?.nama || 'Pesakit',
+          bilik: namaBilikSah,
+          namaPerawat: bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Tabib Bertugas',
+          perluKerusiRoda: Boolean((palingKini as any)?.perlu_kerusi_roda)
+        };
+
+        setPanggilanTerkini(infoPanggilan);
 
         if (tokenPanggilan !== panggilanTerkiniRef.current) {
           panggilanTerkiniRef.current = tokenPanggilan;
-
-          const perawatObj = palingKini.perawat as any;
-          const bilikUstaz = bilikData.find(
-            (b) =>
-              (b.perawat_semasa_id && String(b.perawat_semasa_id) === String(palingKini.perawat_id)) ||
-              (b.perawat?.id && String(b.perawat.id) === String(palingKini.perawat_id)) ||
-              (perawatObj?.no_bilik && b.nama_bilik.toLowerCase().trim() === perawatObj.no_bilik.toLowerCase().trim())
-          );
-
-          const infoPanggilan: InfoPanggilan = {
-            id: palingKini.id,
-            noGiliran: palingKini.no_giliran,
-            namaPesakit: (palingKini.pesakit as any)?.nama || 'Pesakit',
-            bilik: bilikUstaz ? bilikUstaz.nama_bilik : perawatObj?.no_bilik || 'Bilik Rawatan',
-            namaPerawat: bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Tabib Bertugas',
-            perluKerusiRoda: Boolean((palingKini as any)?.perlu_kerusi_roda)
-          };
-
-          setPanggilanTerkini(infoPanggilan);
           panggilSuara(infoPanggilan.noGiliran, infoPanggilan.bilik, infoPanggilan.namaPerawat);
         }
       } else {
@@ -505,13 +588,8 @@ export default function SkrinTVDewan() {
             );
           const namaPerawat = perawatBilik?.nama || null;
 
-          const rawatanBilik = giliranAktif?.find((g: any) => {
-            const pObj = g.perawat as any;
-            return (
-              (b.perawat_semasa_id && String(g.perawat_id) === String(b.perawat_semasa_id)) ||
-              (perawatBilik?.id && String(g.perawat_id) === String(perawatBilik.id)) ||
-              (pObj?.no_bilik && pObj.no_bilik.toLowerCase().trim() === b.nama_bilik.toLowerCase().trim())
-            );
+          const rawatanBilik = giliranSah.find((g: any) => {
+            return String(b.perawat_semasa_id) === String(g.perawat_id);
           });
 
           return {
@@ -533,7 +611,6 @@ export default function SkrinTVDewan() {
         .from('giliran')
         .select('no_giliran')
         .eq('status', 'menunggu')
-        .gte('created_at', `${tarikhHariIni}T00:00:00`)
         .order('created_at', { ascending: true })
         .limit(6);
 
@@ -591,7 +668,6 @@ export default function SkrinTVDewan() {
       <audio ref={audioChimeRef} src="/sounds/chime.mp3" preload="auto" />
       <audio ref={audioTtsRef} preload="auto" />
 
-      {/* Butang Keluar Skrin Penuh */}
       <div className={styles.exitZone}>
         <button
           onClick={keluarSkrinPenuh}
@@ -612,7 +688,6 @@ export default function SkrinTVDewan() {
           </div>
         )}
 
-        {/* Pengepala Atas */}
         <header className={styles.topBar}>
           <div className={styles.clinicBrand}>
             <img src="/logo.png" alt="SyifaLink" className={styles.logoImage} />
@@ -647,7 +722,6 @@ export default function SkrinTVDewan() {
           </div>
         </header>
 
-        {/* Susun Atur Utama */}
         <div className={styles.mainLayout}>
           {/* BARIS 1 KIRI: SEDANG DIPANGGIL */}
           <section className={styles.nowSeeingCard}>
@@ -746,12 +820,10 @@ export default function SkrinTVDewan() {
             </div>
           </section>
 
-          {/* ========================================================
-              BARIS 2 KIRI: PEMAIN VIDEO SIARAN TV (TERAPUNG & BEBAS JIDAR HITAM)
-             ======================================================== */}
+          {/* BARIS 2 KIRI: PEMAIN VIDEO TERAPUNG */}
           <div style={{
             height: '100%',
-            minHeight: '220px',
+            minHeight: '150px',
             backgroundColor: '#ffffff',
             borderRadius: '1.25rem',
             overflow: 'hidden',
@@ -819,7 +891,6 @@ export default function SkrinTVDewan() {
               </div>
             )}
 
-            {/* Lencana Tajuk & Aras Suara Ringkas di Bucu Bawah */}
             {videoSemasa && (
               <div style={{
                 position: 'absolute',
@@ -847,7 +918,7 @@ export default function SkrinTVDewan() {
                 <Film size={13} color="#38bdf8" />
                 <span>{videoSemasa.tajuk}</span>
                 <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
-                  • {videoSemasa.loop_tunggal ? 'Loop' : ''} 
+                  • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
                 </span>
               </div>
             )}
@@ -877,7 +948,6 @@ export default function SkrinTVDewan() {
         </div>
       </div>
 
-      {/* Ticker Makluman Bergerak */}
       <footer className={styles.tickerFooter}>
         <div className={styles.tickerTrack}>
           {[...senaraiTicker, ...senaraiTicker].map((item, idx) => (
