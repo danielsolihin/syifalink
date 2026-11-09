@@ -114,22 +114,14 @@ export default function SkrinTVDewan() {
     setAudioDibenarkan(true);
 
     if (audioChimeRef.current) {
-      audioChimeRef.current.play().then(() => {
-        if (audioChimeRef.current) {
-          audioChimeRef.current.pause();
-          audioChimeRef.current.currentTime = 0;
-        }
-      }).catch(() => {});
+      audioChimeRef.current.currentTime = 0;
+      audioChimeRef.current.volume = 1.0;
+      audioChimeRef.current.play().catch(() => {});
     }
 
     if (audioTtsRef.current) {
       audioTtsRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-      audioTtsRef.current.play().then(() => {
-        if (audioTtsRef.current) {
-          audioTtsRef.current.pause();
-          audioTtsRef.current.currentTime = 0;
-        }
-      }).catch(() => {});
+      audioTtsRef.current.play().catch(() => {});
     }
 
     if (!document.fullscreenElement) {
@@ -328,6 +320,7 @@ export default function SkrinTVDewan() {
     }
   }, [videoSemasa]);
 
+  // Redakan dan Pulihkan Audio Video Latar
   const redakanAudioVideoLatar = () => {
     if (videoPlayerRef.current) {
       videoPlayerRef.current.muted = true;
@@ -357,7 +350,7 @@ export default function SkrinTVDewan() {
           '*'
         );
       }
-    }, 1200);
+    }, 1000);
   };
 
   const janaYouTubeEmbedUrl = (url: string, loop: boolean) => {
@@ -378,11 +371,10 @@ export default function SkrinTVDewan() {
   };
 
   // ========================================================
-  // 7. SISTEM CHUNK AUDIO MP3: SETIAP PERKATAAN SATU CHUNK
+  // 7. SISTEM AUDIO PANGGILAN GILIRAN (LOCENG + SUARA MELAYU)
   // ========================================================
-  const binaSlotsPanggilan = (noGiliran: string, bilik: string, namaPerawat: string): string[][] => {
+  const janaTeksSebutanMelayu = (noGiliran: string, bilik: string, namaPerawat: string) => {
     const abjad = noGiliran.charAt(0).toUpperCase();
-    const lowerAbjad = abjad.toLowerCase();
     const nomborBahagian = noGiliran.replace(/^[A-Za-z]+[-_\s]*/, '');
 
     const sebutanDigit: { [key: string]: string } = {
@@ -398,170 +390,91 @@ export default function SkrinTVDewan() {
       '9': 'sembilan'
     };
 
-    const digits = nomborBahagian.split('');
-    const roomMatch = bilik.match(/\d+/);
-    const roomNum = roomMatch ? roomMatch[0] : '';
-    const roomWord = sebutanDigit[roomNum] || roomNum;
+    const digitDieja = nomborBahagian
+      .split('')
+      .map((d) => sebutanDigit[d] || d)
+      .join(', ');
 
-    const slots: string[][] = [];
+    const bilikDieja = bilik
+      .replace(/\b1\b/g, 'satu')
+      .replace(/\b2\b/g, 'dua')
+      .replace(/\b3\b/g, 'tiga')
+      .replace(/\b4\b/g, 'empat')
+      .replace(/\b5\b/g, 'lima')
+      .replace(/\b6\b/g, 'enam')
+      .replace(/\b7\b/g, 'tujuh')
+      .replace(/\b8\b/g, 'lapan')
+      .replace(/\b9\b/g, 'sembilan');
 
-    // Slot 1: "Nombor giliran"
-    slots.push([
-      '/sounds/nombor-giliran.mp3',
-      '/sounds/nombor_giliran.mp3',
-      '/sounds/nombor.mp3',
-      '/api/tts?text=Nombor+giliran'
-    ]);
-
-    // Slot 2: Huruf abjad (cth: K)
-    slots.push([
-      `/sounds/${abjad}.mp3`,
-      `/sounds/${lowerAbjad}.mp3`,
-      `/sounds/huruf-${lowerAbjad}.mp3`,
-      `/api/tts?text=${abjad}`
-    ]);
-
-    // Slot 3+: Setiap Digit (cth: 0, 0, 3)
-    digits.forEach((d) => {
-      const perkataanDigit = sebutanDigit[d] || d;
-      slots.push([
-        `/sounds/${d}.mp3`,
-        `/sounds/${perkataanDigit}.mp3`,
-        `/api/tts?text=${encodeURIComponent(perkataanDigit)}`
-      ]);
-    });
-
-    // Slot: "Sila masuk ke"
-    slots.push([
-      '/sounds/sila-masuk-ke.mp3',
-      '/sounds/sila_masuk_ke.mp3',
-      '/sounds/sila-masuk.mp3',
-      '/sounds/sila-ke.mp3',
-      '/api/tts?text=Sila+masuk+ke'
-    ]);
-
-    // Slot: Bilik
-    slots.push([
-      '/sounds/bilik.mp3',
-      `/sounds/bilik-${roomNum}.mp3`,
-      `/api/tts?text=Bilik`
-    ]);
-
-    // Slot: Nombor Bilik
-    if (roomNum) {
-      slots.push([
-        `/sounds/${roomNum}.mp3`,
-        `/sounds/${roomWord}.mp3`,
-        `/api/tts?text=${encodeURIComponent(roomWord)}`
-      ]);
-    }
-
-    // Slot: Nama Perawat (pilihan jika bukan default)
+    let ayat = `Nombor giliran, ${abjad}, ${digitDieja}. Sila masuk ke ${bilikDieja}.`;
     if (namaPerawat && !namaPerawat.toLowerCase().includes('tabib bertugas')) {
-      slots.push([
-        `/api/tts?text=${encodeURIComponent('bersama ' + namaPerawat)}`
-      ]);
+      ayat += ` Bersama ${namaPerawat}.`;
     }
-
-    return slots;
-  };
-
-  // Mainkan senarai slot chunk satu demi satu dengan sokongan sandaran automatik
-  const mainkanUrutanSlots = (slots: string[][], onSelesai: () => void) => {
-    if (!audioTtsRef.current || slots.length === 0) {
-      onSelesai();
-      return;
-    }
-
-    const audioEl = audioTtsRef.current;
-    let slotIndex = 0;
-
-    const mainkanSlotSemasa = () => {
-      if (slotIndex >= slots.length) {
-        audioEl.onended = null;
-        audioEl.onerror = null;
-        onSelesai();
-        return;
-      }
-
-      const senaraiPilihan = slots[slotIndex];
-      slotIndex++;
-
-      let pilihanIndex = 0;
-
-      const cubaPilihan = () => {
-        if (pilihanIndex >= senaraiPilihan.length) {
-          // Jika semua calon untuk slot ini gagal, terus ke slot seterusnya
-          setTimeout(mainkanSlotSemasa, 50);
-          return;
-        }
-
-        const urlAudio = senaraiPilihan[pilihanIndex];
-        pilihanIndex++;
-
-        audioEl.onended = () => {
-          // Jeda semulajadi 90ms antara perkataan
-          setTimeout(mainkanSlotSemasa, 90);
-        };
-
-        audioEl.onerror = () => {
-          // Jika fail MP3 404, cuba calon seterusnya dalam slot ini
-          cubaPilihan();
-        };
-
-        audioEl.src = urlAudio;
-        audioEl.volume = 1.0;
-
-        const p = audioEl.play();
-        if (p !== undefined) {
-          p.catch(() => {
-            cubaPilihan();
-          });
-        }
-      };
-
-      cubaPilihan();
-    };
-
-    mainkanSlotSemasa();
+    return ayat;
   };
 
   const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
     redakanAudioVideoLatar();
 
-    const slots = binaSlotsPanggilan(noGiliran, bilik, namaPerawat);
+    const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
+    const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
 
-    let sudahMula = false;
-    const mulaUrutanPanggilan = () => {
-      if (sudahMula) return;
-      sudahMula = true;
-      mainkanUrutanSlots(slots, () => {
+    // Pramuat suara panggilan
+    if (audioTtsRef.current) {
+      audioTtsRef.current.src = audioUrl;
+      audioTtsRef.current.load();
+    }
+
+    let suaraSudahMula = false;
+    const mainkanSuaraPanggilan = () => {
+      if (suaraSudahMula) return;
+      suaraSudahMula = true;
+
+      if (audioTtsRef.current) {
+        audioTtsRef.current.volume = 1.0;
+        audioTtsRef.current.onended = () => {
+          pulihkanAudioVideoLatar();
+        };
+        audioTtsRef.current.onerror = () => {
+          pulihkanAudioVideoLatar();
+        };
+
+        const playPromise = audioTtsRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            pulihkanAudioVideoLatar();
+          });
+        }
+      } else {
         pulihkanAudioVideoLatar();
-      });
+      }
     };
 
-    // 1. Mainkan fail loceng chime.mp3 dahulu
+    // Mainkan fail loceng chime.mp3 terlebih dahulu
     if (audioChimeRef.current) {
       audioChimeRef.current.currentTime = 0;
+      audioChimeRef.current.volume = 1.0;
+
       audioChimeRef.current.onended = () => {
-        setTimeout(mulaUrutanPanggilan, 250);
+        // Sebaik loceng tamat, tunggu jeda santai 350ms sebelum suara bermula
+        setTimeout(mainkanSuaraPanggilan, 350);
       };
 
       const playChime = audioChimeRef.current.play();
       if (playChime !== undefined) {
         playChime.catch(() => {
-          setTimeout(mulaUrutanPanggilan, 350);
+          setTimeout(mainkanSuaraPanggilan, 500);
         });
       }
 
-      // Sandaran masa jika acara onended terhalang di TV
-      setTimeout(mulaUrutanPanggilan, 2600);
+      // Sandaran masa jika onended disekat oleh pelayar TV
+      setTimeout(mainkanSuaraPanggilan, 2600);
     } else {
-      mulaUrutanPanggilan();
+      mainkanSuaraPanggilan();
     }
   };
 
-  // 8. Muat Data Skrin & Status Bilik (Tapisan Bilik Bertugas Aktif)
+  // 8. Muat Data Skrin & Status Bilik (Masa Nyata)
   const muatDataSkrin = async () => {
     try {
       const { data: bilikData } = await supabase
@@ -579,36 +492,33 @@ export default function SkrinTVDewan() {
         .select('*, pesakit(nama), perawat(id, nama, no_bilik)')
         .in('status', ['dipanggil', 'sedang_rawat', 'rawatan']);
 
-      const senaraiBilikBertugas = bilikData?.filter((b) => b.status_aktif && b.perawat_semasa_id) || [];
-
-      const giliranSah = giliranAktif?.filter((g) => {
-        if (!g.perawat_id) return false;
-        return senaraiBilikBertugas.some((b) => String(b.perawat_semasa_id) === String(g.perawat_id));
-      }) || [];
-
-      if (giliranSah.length > 0) {
-        const susunTerbaru = [...giliranSah].sort((a, b) => {
+      if (giliranAktif && giliranAktif.length > 0) {
+        const susunTerbaru = [...giliranAktif].sort((a, b) => {
           const masaA = new Date(a.waktu_panggil || a.updated_at || a.created_at).getTime();
           const masaB = new Date(b.waktu_panggil || b.updated_at || b.created_at).getTime();
           return masaB - masaA;
         });
 
         const palingKini = susunTerbaru[0];
-        const tokenPanggilan = `${palingKini.id}_${palingKini.waktu_panggil || palingKini.status || ''}`;
+        const tokenPanggilan = `${palingKini.id}_${palingKini.waktu_panggil || palingKini.updated_at || palingKini.status}`;
 
         const perawatObj = palingKini.perawat as any;
-        const bilikUstaz = senaraiBilikBertugas.find(
-          (b) => String(b.perawat_semasa_id) === String(palingKini.perawat_id)
+        const bilikUstaz = bilikData?.find(
+          (b) =>
+            (b.perawat_semasa_id && String(b.perawat_semasa_id) === String(palingKini.perawat_id)) ||
+            (b.perawat?.id && String(b.perawat.id) === String(palingKini.perawat_id)) ||
+            (perawatObj?.no_bilik && b.nama_bilik.toLowerCase().trim() === perawatObj.no_bilik.toLowerCase().trim())
         );
 
-        const namaBilikSah = bilikUstaz ? bilikUstaz.nama_bilik : 'Bilik Rawatan';
+        const namaBilikSah = bilikUstaz ? bilikUstaz.nama_bilik : perawatObj?.no_bilik || 'Bilik Rawatan';
+        const namaTabibSah = bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Tabib Bertugas';
 
         const infoPanggilan: InfoPanggilan = {
           id: palingKini.id,
           noGiliran: palingKini.no_giliran,
           namaPesakit: (palingKini.pesakit as any)?.nama || 'Pesakit',
           bilik: namaBilikSah,
-          namaPerawat: bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Tabib Bertugas',
+          namaPerawat: namaTabibSah,
           perluKerusiRoda: Boolean((palingKini as any)?.perlu_kerusi_roda)
         };
 
@@ -635,8 +545,13 @@ export default function SkrinTVDewan() {
             );
           const namaPerawat = perawatBilik?.nama || null;
 
-          const rawatanBilik = giliranSah.find((g: any) => {
-            return String(b.perawat_semasa_id) === String(g.perawat_id);
+          const rawatanBilik = giliranAktif?.find((g: any) => {
+            const pObj = g.perawat as any;
+            return (
+              (b.perawat_semasa_id && String(g.perawat_id) === String(b.perawat_semasa_id)) ||
+              (perawatBilik?.id && String(g.perawat_id) === String(perawatBilik.id)) ||
+              (pObj?.no_bilik && pObj.no_bilik.toLowerCase().trim() === b.nama_bilik.toLowerCase().trim())
+            );
           });
 
           return {
@@ -712,8 +627,8 @@ export default function SkrinTVDewan() {
         }
       }}
     >
-      <audio ref={audioChimeRef} src="/sounds/chime.mp3" preload="auto" />
-      <audio ref={audioTtsRef} preload="auto" />
+      <audio ref={audioChimeRef} src="/sounds/chime.mp3" preload="auto" playsInline />
+      <audio ref={audioTtsRef} preload="auto" playsInline />
 
       <div className={styles.exitZone}>
         <button
