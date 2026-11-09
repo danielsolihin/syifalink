@@ -10,7 +10,8 @@ import {
   Car, 
   RefreshCw, 
   Stethoscope, 
-  Sparkles 
+  Sparkles,
+  Printer
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -31,26 +32,21 @@ interface Pesakit {
 }
 
 export default function PendaftaranKiosk() {
-  // Input Carian Hanya No. IC
   const [carianIC, setCarianIC] = useState('');
   const [sedangSemak, setSedangSemak] = useState(false);
 
-  // Status Semakan: 'mula' | 'ditemui' | 'baharu'
   const [statusSemakan, setStatusSemakan] = useState<'mula' | 'ditemui' | 'baharu'>('mula');
   const [pesakitDitemui, setPesakitDitemui] = useState<Pesakit | null>(null);
 
-  // Medan Borang
   const [nama, setNama] = useState('');
   const [noIC, setNoIC] = useState('');
   const [noTelefon, setNoTelefon] = useState('');
   const [alamat, setAlamat] = useState('');
 
-  // Bantuan Kerusi Roda
   const [perluWheelchair, setPerluWheelchair] = useState(false);
   const [noPlatKereta, setNoPlatKereta] = useState('');
   const [catatanMobiliti, setCatatanMobiliti] = useState('Tidak boleh berjalan / Lumpuh');
 
-  // Pilihan Perawat (Default: Automatik / Virtual Floating Queue)
   const [senaraiPerawat, setSenaraiPerawat] = useState<Perawat[]>([]);
   const [pilihTabibKhusus, setPilihTabibKhusus] = useState(false);
   const [perawatDipilih, setPerawatDipilih] = useState<string>('');
@@ -65,7 +61,7 @@ export default function PendaftaranKiosk() {
         .from('perawat')
         .select('*')
         .eq('status_aktif', true)
-        .order('no_bilik', { ascending: true });
+        .order('id', { ascending: true });
 
       if (data && data.length > 0) {
         setSenaraiPerawat(data);
@@ -75,7 +71,57 @@ export default function PendaftaranKiosk() {
     muatPerawat();
   }, []);
 
-  // 2. Semak No. IC Sahaja
+  const semakSemula = () => {
+    setStatusSemakan('mula');
+    setPesakitDitemui(null);
+    setCarianIC('');
+    setNama('');
+    setNoIC('');
+    setNoTelefon('');
+    setAlamat('');
+    setPerluWheelchair(false);
+    setNoPlatKereta('');
+    setPilihTabibKhusus(false);
+  };
+
+  // 2. Kitaran Cetakan & Penutupan Automatik (Auto-Print & Auto-Dismiss)
+  useEffect(() => {
+    if (tiketSelesai) {
+      // Fungsi untuk menutup tiket dan mengosongkan borang
+      const tutupTiketAutomatik = () => {
+        setTimeout(() => {
+          setTiketSelesai(null);
+          semakSemula();
+        }, 1200);
+      };
+
+      // Dikesan sebaik sahaja printer selesai mencetak / dialog cetak ditutup
+      window.addEventListener('afterprint', tutupTiketAutomatik);
+
+      // Picu cetakan printer serta-merta
+      const timerPrint = setTimeout(() => {
+        try {
+          window.print();
+        } catch (err) {
+          console.error('Ralat cetakan:', err);
+        }
+      }, 350);
+
+      // Sandaran keselamatan: Tiket tetap akan hilang secara automatik selepas 6 saat
+      const timerFailsafe = setTimeout(() => {
+        setTiketSelesai(null);
+        semakSemula();
+      }, 6000);
+
+      return () => {
+        window.removeEventListener('afterprint', tutupTiketAutomatik);
+        clearTimeout(timerPrint);
+        clearTimeout(timerFailsafe);
+      };
+    }
+  }, [tiketSelesai]);
+
+  // 3. Semak No. IC Sahaja
   const tanganiSemakan = async (e: React.FormEvent) => {
     e.preventDefault();
     const bersihIC = carianIC.trim();
@@ -120,20 +166,7 @@ export default function PendaftaranKiosk() {
     }
   };
 
-  const semakSemula = () => {
-    setStatusSemakan('mula');
-    setPesakitDitemui(null);
-    setCarianIC('');
-    setNama('');
-    setNoIC('');
-    setNoTelefon('');
-    setAlamat('');
-    setPerluWheelchair(false);
-    setNoPlatKereta('');
-    setPilihTabibKhusus(false);
-  };
-
-  // 3. Proses Pendaftaran & Auto-Print Sahaja
+  // 4. Proses Pendaftaran Giliran
   const prosesDaftarDanAutoAksi = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!nama.trim() || !noIC.trim() || !noTelefon.trim()) {
@@ -145,7 +178,6 @@ export default function PendaftaranKiosk() {
     try {
       let pesakitId: string;
 
-      // Semak pangkalan data terlebih dahulu untuk menjamin tiada pelanggaran unique key
       const { data: semakSediaAda } = await supabase
         .from('pesakit')
         .select('id')
@@ -181,7 +213,6 @@ export default function PendaftaranKiosk() {
           .single();
 
         if (errPesakit) {
-          // Sandaran jika berlaku konflik serentak (code 23505)
           if (errPesakit.code === '23505') {
             const { data: pesakitKonflik } = await supabase
               .from('pesakit')
@@ -197,7 +228,7 @@ export default function PendaftaranKiosk() {
         }
       }
 
-      // Jana Nombor Giliran Hari Ini (Format K-xxx)
+      // Jana Nombor Giliran Hari Ini
       const tarikhHariIni = new Date().toISOString().split('T')[0];
       const { count } = await supabase
         .from('giliran')
@@ -207,7 +238,7 @@ export default function PendaftaranKiosk() {
       const turutan = (count || 0) + 1;
       const noGiliranJana = `K-${String(turutan).padStart(3, '0')}`;
 
-      // Semak nombor giliran aktif sebelum ini
+      // Semak Nombor Terkini Sebelum
       const { data: giliranAktif } = await supabase
         .from('giliran')
         .select('no_giliran, status')
@@ -221,7 +252,6 @@ export default function PendaftaranKiosk() {
         noSebelum = `K-${String(turutan - 1).padStart(3, '0')}`;
       }
 
-      // JIKA AUTOMATIK: perawat_id disimpan sebagai NULL (Terapung dalam Kolam Giliran Maya)
       const targetPerawatId = (pilihTabibKhusus && perawatDipilih) ? perawatDipilih : null;
       const ustazObj = targetPerawatId ? senaraiPerawat.find(u => u.id === targetPerawatId) : null;
 
@@ -240,7 +270,8 @@ export default function PendaftaranKiosk() {
 
       if (errGiliran) throw errGiliran;
 
-      const dataTiket = {
+      // Paparkan Tiket
+      setTiketSelesai({
         no_giliran: noGiliranJana,
         nama: nama.trim(),
         no_telefon: noTelefon.trim(),
@@ -251,14 +282,7 @@ export default function PendaftaranKiosk() {
         perlu_kerusi_roda: perluWheelchair,
         no_plat_kereta: noPlatKereta.trim().toUpperCase(),
         no_terkini_sebelum: noSebelum || 'Sedang Bermula'
-      };
-
-      setTiketSelesai(dataTiket);
-
-      // CETAKAN RESIT AUTOMATIK
-      setTimeout(() => {
-        window.print();
-      }, 500);
+      });
 
     } catch (err: any) {
       alert('Ralat pendaftaran: ' + err.message);
@@ -267,7 +291,6 @@ export default function PendaftaranKiosk() {
     }
   };
 
-  // Komponen Kad Pilihan Tabib (Automatik vs Khusus)
   const renderPilihanTabib = () => (
     <div style={{
       backgroundColor: '#162032',
@@ -376,7 +399,7 @@ export default function PendaftaranKiosk() {
       alignItems: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
-      {/* Gaya Cetakan Slip Terasing */}
+      {/* Format Cetakan Slip Thermal */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * {
@@ -388,10 +411,10 @@ export default function PendaftaranKiosk() {
           #printSlipArea {
             position: fixed !important;
             left: 50% !important;
-            top: 20px !important;
+            top: 10px !important;
             transform: translateX(-50%) !important;
-            width: 320px !important;
-            padding: 16px !important;
+            width: 300px !important;
+            padding: 12px !important;
             box-shadow: none !important;
             border: 1px dashed #000 !important;
             background: #fff !important;
@@ -437,9 +460,7 @@ export default function PendaftaranKiosk() {
           </p>
         </div>
 
-        {/* ========================================================
-            BAHAGIAN 1: SEMAK NO. IC SAHAJA
-           ======================================================== */}
+        {/* BAHAGIAN 1: SEMAK NO. IC */}
         {statusSemakan === 'mula' && (
           <form onSubmit={tanganiSemakan}>
             <div style={{
@@ -504,9 +525,7 @@ export default function PendaftaranKiosk() {
           </form>
         )}
 
-        {/* ========================================================
-            BAHAGIAN 2A: REKOD DITEMUI
-           ======================================================== */}
+        {/* BAHAGIAN 2A: REKOD DITEMUI */}
         {statusSemakan === 'ditemui' && pesakitDitemui && (
           <form onSubmit={prosesDaftarDanAutoAksi}>
             <div style={{
@@ -609,10 +628,8 @@ export default function PendaftaranKiosk() {
               )}
             </div>
 
-            {/* Pilihan Tabib (Automatik vs Khusus) */}
             {renderPilihanTabib()}
 
-            {/* Butang Daftar */}
             <button
               type="submit"
               disabled={memproses}
@@ -630,14 +647,12 @@ export default function PendaftaranKiosk() {
                 boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
               }}
             >
-              {memproses ? 'Memproses Pendaftaran...' : 'Daftar'}
+              {memproses ? 'Memproses Pendaftaran...' : 'Daftar Giliran & Cetak Tiket'}
             </button>
           </form>
         )}
 
-        {/* ========================================================
-            BAHAGIAN 2B: PESAKIT BAHARU
-           ======================================================== */}
+        {/* BAHAGIAN 2B: PESAKIT BAHARU */}
         {statusSemakan === 'baharu' && (
           <form onSubmit={prosesDaftarDanAutoAksi}>
             <div style={{
@@ -759,8 +774,7 @@ export default function PendaftaranKiosk() {
                       color: '#ffffff',
                       fontSize: '0.85rem',
                       outline: 'none',
-                      boxSizing: 'border-box',
-                      resize: 'vertical'
+                      boxSizing: 'border-box'
                     }}
                   />
                 </div>
@@ -816,10 +830,8 @@ export default function PendaftaranKiosk() {
               )}
             </div>
 
-            {/* Pilihan Tabib (Automatik vs Khusus) */}
             {renderPilihanTabib()}
 
-            {/* Butang Daftar */}
             <button
               type="submit"
               disabled={memproses}
@@ -837,15 +849,13 @@ export default function PendaftaranKiosk() {
                 boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
               }}
             >
-              {memproses ? 'Memproses Pendaftaran...' : 'Daftar'}
+              {memproses ? 'Memproses Pendaftaran...' : 'Daftar Giliran & Cetak Tiket'}
             </button>
           </form>
         )}
       </div>
 
-      {/* ========================================================
-          MODAL RESIT: AUTO-PRINT SAHAJA & MAKLUMAN NOMBOR TERKINI
-         ======================================================== */}
+      {/* MODAL RESIT (BEBAS BUTANG — HILANG SENDIRI SELEPAS CETAKAN) */}
       {tiketSelesai && (
         <div style={{
           position: 'fixed',
@@ -974,29 +984,9 @@ export default function PendaftaranKiosk() {
               </div>
             </div>
 
-            {/* Butang Selesai & Semak Semula */}
-            <div className="kioskHideOnPrint">
-              <button
-                onClick={() => {
-                  setTiketSelesai(null);
-                  semakSemula();
-                }}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#0f172a',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '0.6rem',
-                  padding: '0.9rem',
-                  fontWeight: 800,
-                  fontSize: '1.05rem',
-                  cursor: 'pointer',
-                  letterSpacing: '0.02em',
-                  transition: 'background-color 0.2s'
-                }}
-              >
-                Daftar
-              </button>
+            {/* Petunjuk Automatik Untuk Pengguna (Tiada Butang) */}
+            <div className="kioskHideOnPrint" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: '#64748b', fontSize: '0.8rem', fontWeight: 600 }}>
+              <Printer size={15} /> Sedang mencetak tiket anda...
             </div>
           </div>
         </div>

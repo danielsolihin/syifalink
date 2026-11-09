@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import styles from './tv.module.css';
-import { Volume2, Users, Stethoscope, CloudSun, Bell, FileText, ArrowRight, X } from 'lucide-react';
+import { Volume2, Users, Stethoscope, CloudSun, ArrowRight, X, Film } from 'lucide-react';
 
 interface InfoPanggilan {
   id: string;
@@ -21,6 +21,16 @@ interface ItemTicker {
   teks_maksud: string;
   rujukan?: string | null;
   kategori?: string;
+}
+
+interface ItemVideo {
+  id: string;
+  tajuk: string;
+  url_video: string;
+  jenis: 'youtube' | 'mp4';
+  loop_tunggal: boolean;
+  kelantangan_audio: number;
+  status_aktif: boolean;
 }
 
 export default function SkrinTVDewan() {
@@ -46,23 +56,17 @@ export default function SkrinTVDewan() {
   const [semuaBilikStatus, setSemuaBilikStatus] = useState<any[]>([]);
   const [halamanBilik, setHalamanBilik] = useState<number>(0);
   const [senaraiMenunggu, setSenaraiMenunggu] = useState<any[]>([]);
-
-  // Ticker Siaran & Makluman Tetap
   const [senaraiTicker, setSenaraiTicker] = useState<ItemTicker[]>([]);
-  const [maklumanTetap, setMaklumanTetap] = useState<{ tajuk: string; huraian: string }[]>([
-    {
-      tajuk: 'Pihak Pengurusan',
-      huraian: 'Selamat Datang ke Pusat Rawatan Islam Darul Syifa\'. Sila patuhi adab dewan menunggu.'
-    },
-    {
-      tajuk: 'Kaunter Pembayaran & Farmasi',
-      huraian: 'Para pelanggan diminta menyerahkan slip giliran ke kaunter farmasi selepas selesai sesi rawatan.'
-    }
-  ]);
+
+  // Pemain Video TV
+  const [senaraiVideo, setSenaraiVideo] = useState<ItemVideo[]>([]);
+  const [videoSemasa, setVideoSemasa] = useState<ItemVideo | null>(null);
 
   const panggilanTerkiniRef = useRef<string | null>(null);
   const audioChimeRef = useRef<HTMLAudioElement | null>(null);
   const audioTtsRef = useRef<HTMLAudioElement | null>(null);
+  const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
+  const iframePlayerRef = useRef<HTMLIFrameElement | null>(null);
 
   // Helper Pemformat Waktu Solat
   const formatMasaSolat = (waktu: any): string => {
@@ -74,7 +78,6 @@ export default function SkrinTVDewan() {
     return String(waktu);
   };
 
-  // Enjin Pengiraan Solat Aktif
   const kiraSolatAktif = (jadual: { [key: string]: string }) => {
     try {
       const kini = new Date();
@@ -106,11 +109,10 @@ export default function SkrinTVDewan() {
     } catch (e) {}
   };
 
-  // 1. Pengurusan Skrin Penuh & Buka Kunci Audio Android TV
+  // 1. Skrin Penuh & Kebenaran Audio
   const aktifkanSkrinPenuhDanAudio = () => {
     setAudioDibenarkan(true);
 
-    // Buka kunci Chime
     if (audioChimeRef.current) {
       audioChimeRef.current.play().then(() => {
         if (audioChimeRef.current) {
@@ -120,7 +122,6 @@ export default function SkrinTVDewan() {
       }).catch((err) => console.log('Izin chime TV:', err));
     }
 
-    // Buka kunci saluran audio TTS serentak supaya tidak disekat Android TV
     if (audioTtsRef.current) {
       audioTtsRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
       audioTtsRef.current.play().then(() => {
@@ -134,9 +135,7 @@ export default function SkrinTVDewan() {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => {
         setIsSkrinPenuh(true);
-      }).catch((err) => {
-        console.log('Kebenaran skrin penuh diperlukan:', err);
-      });
+      }).catch(() => {});
     }
   };
 
@@ -145,7 +144,7 @@ export default function SkrinTVDewan() {
     if (document.fullscreenElement) {
       document.exitFullscreen().then(() => {
         setIsSkrinPenuh(false);
-      }).catch((err) => console.log(err));
+      }).catch(() => {});
     }
   };
 
@@ -170,7 +169,7 @@ export default function SkrinTVDewan() {
     return () => clearInterval(pemasa);
   }, [jadualSolat]);
 
-  // 3. Cuaca Live
+  // 3. Cuaca
   useEffect(() => {
     const ambilCuaca = async () => {
       try {
@@ -193,7 +192,7 @@ export default function SkrinTVDewan() {
     return () => clearInterval(pemasaCuaca);
   }, []);
 
-  // 4. Waktu Solat JAKIM
+  // 4. Waktu Solat
   useEffect(() => {
     const ambilWaktuSolat = async () => {
       try {
@@ -216,7 +215,7 @@ export default function SkrinTVDewan() {
     ambilWaktuSolat();
   }, []);
 
-  // 5. Muat Data Ticker & Makluman Tetap
+  // 5. Muat Ticker Pengumuman
   const muatDataPengumuman = async () => {
     try {
       const { data } = await supabase
@@ -225,29 +224,172 @@ export default function SkrinTVDewan() {
         .eq('status_aktif', true)
         .order('turutan', { ascending: true });
 
-      if (data && data.length > 0) {
-        setSenaraiTicker(data);
+      if (data && data.length > 0) setSenaraiTicker(data);
+    } catch (err) {}
+  };
 
-        const maklumanKhas = data.filter((d: any) => d.kategori === 'makluman');
-        if (maklumanKhas.length >= 2) {
-          setMaklumanTetap([
-            {
-              tajuk: maklumanKhas[0].rujukan || 'Pihak Pengurusan',
-              huraian: maklumanKhas[0].teks_maksud
-            },
-            {
-              tajuk: maklumanKhas[1].rujukan || 'Kaunter Pembayaran & Farmasi',
-              huraian: maklumanKhas[1].teks_maksud
-            }
-          ]);
-        }
+  // 6. PENGURUSAN VIDEO SIARAN TV (YOUTUBE & MP4)
+  const muatDataVideo = async () => {
+    try {
+      const { data } = await supabase
+        .from('video_tv')
+        .select('*')
+        .eq('status_aktif', true)
+        .order('created_at', { ascending: false });
+
+      if (data && data.length > 0) {
+        setSenaraiVideo(data);
+        setVideoSemasa((prev) => {
+          if (!prev) return data[0];
+          const masihWujud = data.find((v) => v.id === prev.id);
+          return masihWujud || data[0];
+        });
+      } else {
+        setSenaraiVideo([]);
+        setVideoSemasa(null);
       }
-    } catch (err) {
-      console.error('Ralat muat pengumuman:', err);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    muatDataVideo();
+    const ch = supabase
+      .channel('tv_video_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'video_tv' }, () => muatDataVideo())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, []);
+
+  // Tangani Video Tamat (Loop vs Random)
+  const tanganiVideoTamat = () => {
+    if (!videoSemasa || senaraiVideo.length === 0) return;
+
+    if (videoSemasa.loop_tunggal) {
+      if (videoPlayerRef.current) {
+        videoPlayerRef.current.currentTime = 0;
+        videoPlayerRef.current.play().catch(() => {});
+      }
+      return;
+    }
+
+    if (senaraiVideo.length > 1) {
+      const videoLain = senaraiVideo.filter((v) => v.id !== videoSemasa.id);
+      const videoRawak = videoLain[Math.floor(Math.random() * videoLain.length)];
+      setVideoSemasa(videoRawak);
     }
   };
 
-  // 6. Audio & Suara Panggilan (Rantaian Automatik Kalis Android TV)
+  // Tangani tamat video YouTube melalui API window message
+  useEffect(() => {
+    const tanganiMesejYouTube = (event: MessageEvent) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data?.event === 'onStateChange' && data?.info === 0) {
+          tanganiVideoTamat();
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('message', tanganiMesejYouTube);
+    return () => window.removeEventListener('message', tanganiMesejYouTube);
+  }, [videoSemasa, senaraiVideo]);
+
+  // Selaraskan Kelantangan Video Mengikut Tetapan Admin
+  useEffect(() => {
+    if (!videoSemasa) return;
+    const volPeratus = videoSemasa.kelantangan_audio ?? 20;
+
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.volume = volPeratus / 100;
+      videoPlayerRef.current.muted = volPeratus === 0;
+    }
+
+    if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
+      const postCmd = (func: string, args: any[] = []) => {
+        iframePlayerRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func, args }),
+          '*'
+        );
+      };
+
+      setTimeout(() => {
+        if (volPeratus === 0) {
+          postCmd('mute');
+        } else {
+          postCmd('unMute');
+          postCmd('setVolume', [volPeratus]);
+        }
+      }, 1000);
+    }
+  }, [videoSemasa]);
+
+  // Audio Ducking
+  const redakanAudioVideoLatar = () => {
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.muted = true;
+    }
+    if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
+      iframePlayerRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func: 'mute', args: [] }),
+        '*'
+      );
+    }
+
+    setTimeout(() => {
+      const volPeratus = videoSemasa?.kelantangan_audio ?? 20;
+      if (videoPlayerRef.current) {
+        videoPlayerRef.current.muted = volPeratus === 0;
+        videoPlayerRef.current.volume = volPeratus / 100;
+      }
+      if (iframePlayerRef.current && iframePlayerRef.current.contentWindow && volPeratus > 0) {
+        iframePlayerRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'unMute', args: [] }),
+          '*'
+        );
+        iframePlayerRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'setVolume', args: [volPeratus] }),
+          '*'
+        );
+      }
+    }, 11000);
+  };
+
+  const janaYouTubeEmbedUrl = (url: string, loop: boolean) => {
+    let videoId = '';
+    if (url.includes('youtu.be/')) {
+      videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    } else if (url.includes('watch?v=')) {
+      videoId = url.split('watch?v=')[1]?.split('&')[0];
+    } else if (url.includes('embed/')) {
+      videoId = url.split('embed/')[1]?.split('?')[0];
+    }
+
+    if (!videoId) return url;
+
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&rel=0&playsinline=1&enablejsapi=1${
+      loop ? `&loop=1&playlist=${videoId}` : ''
+    }`;
+  };
+
+  // 7. Audio Loceng Studio & Suara Bahasa Melayu Asal (/api/tts)
+  const mainkanChimeStudio = () => {
+    try {
+      if (audioChimeRef.current) {
+        audioChimeRef.current.currentTime = 0;
+        audioChimeRef.current.play().catch(() => {
+          const chime = new Audio('/sounds/chime.mp3');
+          chime.play().catch(() => {});
+        });
+      } else {
+        const chime = new Audio('/sounds/chime.mp3');
+        chime.play().catch(() => {});
+      }
+    } catch (e) {}
+  };
+
   const janaTeksSebutanMelayu = (noGiliran: string, bilik: string, namaPerawat: string) => {
     const abjad = noGiliran.charAt(0);
     const nomborBahagian = noGiliran.substring(2);
@@ -267,59 +409,34 @@ export default function SkrinTVDewan() {
 
     const digitDieja = nomborBahagian
       .split('')
-      .map(digit => sebutanDigit[digit] || digit)
-      .join(' ');
+      .map((digit) => sebutanDigit[digit] || digit)
+      .join(', ');
 
-    return `Nombor giliran, ${abjad} ${digitDieja}. Sila masuk ke ${bilik}.`;
-  };
-
-  const mainkanAudioPertuturan = (ayat: string) => {
-    const encoded = encodeURIComponent(ayat);
-    const urlGoogleTTS = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ms&client=tw-ob&q=${encoded}`;
-    const urlApiTempatan = `/api/tts?text=${encoded}`;
-
-    if (audioTtsRef.current) {
-      audioTtsRef.current.src = urlApiTempatan;
-      audioTtsRef.current.play().catch(() => {
-        if (audioTtsRef.current) {
-          audioTtsRef.current.src = urlGoogleTTS;
-          audioTtsRef.current.play().catch(() => {
-            if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-              window.speechSynthesis.cancel();
-              const utter = new SpeechSynthesisUtterance(ayat);
-              utter.lang = 'ms-MY';
-              utter.rate = 0.9;
-              window.speechSynthesis.speak(utter);
-            }
-          });
-        }
-      });
-    }
+    return `Nombor giliran, ${abjad}, ${digitDieja}. Sila masuk ke ${bilik}, bersama ${namaPerawat}.`;
   };
 
   const panggilSuara = async (noGiliran: string, bilik: string, namaPerawat: string) => {
+    redakanAudioVideoLatar();
+    mainkanChimeStudio();
     const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
 
-    if (audioChimeRef.current) {
-      audioChimeRef.current.currentTime = 0;
-      audioChimeRef.current.onended = () => {
-        mainkanAudioPertuturan(ayatSebutan);
-      };
-      audioChimeRef.current.play().catch((err) => {
-        console.log('Ralat chime TV:', err);
-        mainkanAudioPertuturan(ayatSebutan);
-      });
-    } else {
-      mainkanAudioPertuturan(ayatSebutan);
-    }
+    setTimeout(() => {
+      try {
+        const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
+        const voiceAudio = new Audio(audioUrl);
+        voiceAudio.volume = 1.0;
+        voiceAudio.play().catch((err) => console.log('Ralat memainkan suara Melayu:', err));
+      } catch (err) {
+        console.error('Ralat TTS:', err);
+      }
+    }, 5000);
   };
 
-  // 7. Muat Data Skrin & Status Bilik Masa Nyata
+  // 8. Muat Data Skrin & Status Bilik Masa Nyata
   const muatDataSkrin = async () => {
     try {
       const tarikhHariIni = new Date().toISOString().split('T')[0];
 
-      // A. Ambil Maklumat Bilik Rawatan & Tabib Bertugas
       const { data: bilikData } = await supabase
         .from('bilik_rawatan')
         .select('*, perawat(id, nama, no_bilik)')
@@ -332,37 +449,39 @@ export default function SkrinTVDewan() {
         .select('*')
         .eq('status_aktif', true);
 
-      // B. Ambil Giliran Aktif
       const { data: giliranAktif } = await supabase
         .from('giliran')
-        .select('id, no_giliran, status, perawat_id, perlu_kerusi_roda, created_at, pesakit(nama), perawat(id, nama, no_bilik)')
+        .select('id, no_giliran, status, perawat_id, perlu_kerusi_roda, created_at, waktu_panggil, pesakit(nama), perawat(id, nama, no_bilik)')
         .in('status', ['dipanggil', 'sedang_rawat', 'rawatan'])
-        .gte('created_at', `${tarikhHariIni}T00:00:00`)
-        .order('created_at', { ascending: false });
+        .gte('created_at', `${tarikhHariIni}T00:00:00`);
 
       if (giliranAktif && giliranAktif.length > 0 && bilikData) {
-        const sedangDipanggil = giliranAktif.filter(g => g.status === 'dipanggil');
-        const sedangRawat = giliranAktif.filter(g => g.status === 'sedang_rawat' || g.status === 'rawatan');
-        const palingKini = sedangDipanggil.length > 0 ? sedangDipanggil[0] : sedangRawat[0];
+        const susunTerbaru = [...giliranAktif].sort((a, b) => {
+          const masaA = new Date(a.waktu_panggil || a.created_at).getTime();
+          const masaB = new Date(b.waktu_panggil || b.created_at).getTime();
+          return masaB - masaA;
+        });
 
-        const tokenPanggilan = `${palingKini.id}_${palingKini.status}`;
+        const palingKini = susunTerbaru[0];
+        const tokenPanggilan = `${palingKini.id}_${palingKini.waktu_panggil || palingKini.status}`;
 
         if (tokenPanggilan !== panggilanTerkiniRef.current) {
           panggilanTerkiniRef.current = tokenPanggilan;
 
           const perawatObj = palingKini.perawat as any;
-          const bilikUstaz = bilikData.find(b => 
-            (b.perawat_semasa_id && String(b.perawat_semasa_id) === String(palingKini.perawat_id)) ||
-            (b.perawat?.id && String(b.perawat.id) === String(palingKini.perawat_id)) ||
-            (perawatObj?.no_bilik && b.nama_bilik.toLowerCase().trim() === perawatObj.no_bilik.toLowerCase().trim())
+          const bilikUstaz = bilikData.find(
+            (b) =>
+              (b.perawat_semasa_id && String(b.perawat_semasa_id) === String(palingKini.perawat_id)) ||
+              (b.perawat?.id && String(b.perawat.id) === String(palingKini.perawat_id)) ||
+              (perawatObj?.no_bilik && b.nama_bilik.toLowerCase().trim() === perawatObj.no_bilik.toLowerCase().trim())
           );
 
           const infoPanggilan: InfoPanggilan = {
             id: palingKini.id,
             noGiliran: palingKini.no_giliran,
             namaPesakit: (palingKini.pesakit as any)?.nama || 'Pesakit',
-            bilik: bilikUstaz ? bilikUstaz.nama_bilik : (perawatObj?.no_bilik || 'Bilik Rawatan'),
-            namaPerawat: perawatObj?.nama || 'Tabib Bertugas',
+            bilik: bilikUstaz ? bilikUstaz.nama_bilik : perawatObj?.no_bilik || 'Bilik Rawatan',
+            namaPerawat: bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Tabib Bertugas',
             perluKerusiRoda: Boolean((palingKini as any)?.perlu_kerusi_roda)
           };
 
@@ -374,13 +493,16 @@ export default function SkrinTVDewan() {
         panggilanTerkiniRef.current = null;
       }
 
-      // C. Padankan Status Bilik Rawatan
+      // Status Bilik Rawatan
       if (bilikData) {
         const bilikKemaskini = bilikData.map((b) => {
-          const perawatBilik = b.perawat || semuaPerawat?.find(p => 
-            (b.perawat_semasa_id && String(p.id) === String(b.perawat_semasa_id)) ||
-            (p.no_bilik && p.no_bilik.toLowerCase().trim() === b.nama_bilik.toLowerCase().trim())
-          );
+          const perawatBilik =
+            b.perawat ||
+            semuaPerawat?.find(
+              (p) =>
+                (b.perawat_semasa_id && String(p.id) === String(b.perawat_semasa_id)) ||
+                (p.no_bilik && p.no_bilik.toLowerCase().trim() === b.nama_bilik.toLowerCase().trim())
+            );
           const namaPerawat = perawatBilik?.nama || null;
 
           const rawatanBilik = giliranAktif?.find((g: any) => {
@@ -406,7 +528,7 @@ export default function SkrinTVDewan() {
         setSemuaBilikStatus(bilikKemaskini);
       }
 
-      // D. Ambil Giliran Menunggu
+      // Senarai Menunggu
       const { data: menungguData } = await supabase
         .from('giliran')
         .select('no_giliran')
@@ -416,7 +538,6 @@ export default function SkrinTVDewan() {
         .limit(6);
 
       setSenaraiMenunggu(menungguData || []);
-
     } catch (err) {
       console.error('Ralat kemaskini TV:', err);
     }
@@ -425,14 +546,13 @@ export default function SkrinTVDewan() {
   useEffect(() => {
     muatDataSkrin();
     muatDataPengumuman();
-    const intervalPoll = setInterval(muatDataSkrin, 2500);
+    const intervalPoll = setInterval(muatDataSkrin, 2000);
 
     const saluran = supabase
       .channel('tv_realtime_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'giliran' }, () => muatDataSkrin())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bilik_rawatan' }, () => muatDataSkrin())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'perawat' }, () => muatDataSkrin())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pengumuman_ticker' }, () => muatDataPengumuman())
       .subscribe();
 
     return () => {
@@ -441,7 +561,7 @@ export default function SkrinTVDewan() {
     };
   }, []);
 
-  // 8. Penggiliran Paparan Bilik
+  // 9. Penggiliran Paparan Bilik
   const jumlahHalaman = Math.max(1, Math.ceil(semuaBilikStatus.length / 4));
 
   useEffect(() => {
@@ -451,7 +571,7 @@ export default function SkrinTVDewan() {
     }
 
     const timerCarousel = setInterval(() => {
-      setHalamanBilik(prev => (prev + 1) % jumlahHalaman);
+      setHalamanBilik((prev) => (prev + 1) % jumlahHalaman);
     }, 12000);
 
     return () => clearInterval(timerCarousel);
@@ -486,10 +606,7 @@ export default function SkrinTVDewan() {
         {!audioDibenarkan && (
           <div className={styles.audioBanner}>
             <span>Sila klik butang di sebelah untuk membenarkan loceng dan suara panggilan TV dewan.</span>
-            <button
-              onClick={aktifkanSkrinPenuhDanAudio}
-              className={styles.btnEnableAudio}
-            >
+            <button onClick={aktifkanSkrinPenuhDanAudio} className={styles.btnEnableAudio}>
               Aktifkan Suara Panggilan & Skrin Penuh
             </button>
           </div>
@@ -608,13 +725,9 @@ export default function SkrinTVDewan() {
                           {b.statusRawatan === 'dipanggil' ? 'Sedang Dipanggil' : 'Sedang Merawat'} (<strong>{b.noGiliranAktif}</strong>)
                         </span>
                       ) : adaUstaz ? (
-                        <span className={styles.statusAvailable}>
-                          Sedia Menerima Pesakit
-                        </span>
+                        <span className={styles.statusAvailable}>Sedia Menerima Pesakit</span>
                       ) : (
-                        <span className={styles.statusClosed}>
-                          Bilik Tidak Beroperasi
-                        </span>
+                        <span className={styles.statusClosed}>Bilik Tidak Beroperasi</span>
                       )}
                     </div>
 
@@ -633,29 +746,111 @@ export default function SkrinTVDewan() {
             </div>
           </section>
 
-          {/* BARIS 2 KIRI: MAKLUMAN TETAP */}
-          <div className={styles.fixedNoticeCard}>
-            <div className={styles.noticeItemRow}>
-              <div className={styles.roundIconTeal}>
-                <Bell size={18} />
+          {/* ========================================================
+              BARIS 2 KIRI: PEMAIN VIDEO SIARAN TV (TERAPUNG & BEBAS JIDAR HITAM)
+             ======================================================== */}
+          <div style={{
+            height: '100%',
+            minHeight: '220px',
+            backgroundColor: '#ffffff',
+            borderRadius: '1.25rem',
+            overflow: 'hidden',
+            border: '2px solid #ffffff',
+            boxShadow: '0 20px 35px -8px rgba(13, 148, 136, 0.18), 0 10px 15px -5px rgba(0, 0, 0, 0.06)',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease'
+          }}>
+            {videoSemasa ? (
+              videoSemasa.jenis === 'mp4' || videoSemasa.url_video.endsWith('.mp4') ? (
+                <video
+                  ref={videoPlayerRef}
+                  key={videoSemasa.id}
+                  src={videoSemasa.url_video}
+                  autoPlay
+                  playsInline
+                  loop={videoSemasa.loop_tunggal}
+                  onEnded={tanganiVideoTamat}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#ffffff'
+                }}>
+                  <iframe
+                    ref={iframePlayerRef}
+                    key={videoSemasa.id}
+                    src={janaYouTubeEmbedUrl(videoSemasa.url_video, videoSemasa.loop_tunggal)}
+                    title={videoSemasa.tajuk}
+                    style={{
+                      width: '104%',
+                      height: '104%',
+                      border: 'none',
+                      transform: 'scale(1.08)',
+                      transformOrigin: 'center center'
+                    }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  />
+                </div>
+              )
+            ) : (
+              <div style={{
+                color: '#64748b',
+                fontSize: '0.9rem',
+                textAlign: 'center',
+                padding: '1.5rem',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <Film size={34} color="#0d9488" opacity={0.6} />
+                <span style={{ fontWeight: 600 }}>Tiada video siaran aktif.</span>
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Tetapkan di Pusat Pentadbir (/admin)</span>
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div className={styles.noticeContentTitle}>{maklumanTetap[0]?.tajuk}</div>
-                <p className={styles.noticeContentDesc}>{maklumanTetap[0]?.huraian}</p>
-              </div>
-            </div>
+            )}
 
-            <div className={styles.noticeDivider}></div>
-
-            <div className={styles.noticeItemRow}>
-              <div className={styles.roundIconTeal}>
-                <FileText size={18} />
+            {/* Lencana Tajuk & Aras Suara Ringkas di Bucu Bawah */}
+            {videoSemasa && (
+              <div style={{
+                position: 'absolute',
+                bottom: '10px',
+                left: '10px',
+                backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                padding: '0.3rem 0.75rem',
+                borderRadius: '0.5rem',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                color: '#ffffff',
+                maxWidth: '85%',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.18)'
+              }}>
+                <Film size={13} color="#38bdf8" />
+                <span>{videoSemasa.tajuk}</span>
+                <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
+                  • {videoSemasa.loop_tunggal ? 'Loop' : ''} 
+                </span>
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div className={styles.noticeContentTitle}>{maklumanTetap[1]?.tajuk}</div>
-                <p className={styles.noticeContentDesc}>{maklumanTetap[1]?.huraian}</p>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* BARIS 2 KANAN: GILIRAN MENUNGGU SETERUSNYA */}
@@ -687,18 +882,14 @@ export default function SkrinTVDewan() {
         <div className={styles.tickerTrack}>
           {[...senaraiTicker, ...senaraiTicker].map((item, idx) => (
             <div key={idx} className={styles.tickerItem}>
-              {item.teks_arab && (
-                <span className={styles.arabicText}>۞ {item.teks_arab}</span>
-              )}
+              {item.teks_arab && <span className={styles.arabicText}>۞ {item.teks_arab}</span>}
               {item.kategori && item.kategori !== 'ayat_syifa' && (
                 <span className={styles.noticeTag}>
                   {item.kategori === 'promosi' ? '★ PROMOSI' : '✦ MAKLUMAN'}
                 </span>
               )}
               <span className={styles.translationText}>"{item.teks_maksud}"</span>
-              {item.rujukan && (
-                <span className={styles.surahRef}>({item.rujukan})</span>
-              )}
+              {item.rujukan && <span className={styles.surahRef}>({item.rujukan})</span>}
             </div>
           ))}
         </div>

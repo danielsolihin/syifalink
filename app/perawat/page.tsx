@@ -4,7 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Perawat } from '@/lib/types';
 import styles from './perawat.module.css';
-import { Send, Bell, PlusCircle, FileText, DoorOpen, LogOut, Accessibility } from 'lucide-react';
+import { 
+  Send, 
+  Bell, 
+  PlusCircle, 
+  FileText, 
+  DoorOpen, 
+  LogOut, 
+  Accessibility, 
+  RotateCcw,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 import Link from 'next/link';
 
 interface ItemPenawar {
@@ -63,6 +74,12 @@ export default function KonsolPerawat() {
   const [sebabMC, setSebabMC] = useState(SEBAB_MC_PRESET[0]);
 
   const [memproses, setMemproses] = useState(false);
+  const [notifikasiMesej, setNotifikasiMesej] = useState<{ teks: string; jenis: 'sukses' | 'ralat' } | null>(null);
+
+  const paparNotifikasi = (teks: string, jenis: 'sukses' | 'ralat' = 'sukses') => {
+    setNotifikasiMesej({ teks, jenis });
+    setTimeout(() => setNotifikasiMesej(null), 4000);
+  };
 
   // 1. Muat Turun Data Asas
   const inisialisasi = async () => {
@@ -93,7 +110,7 @@ export default function KonsolPerawat() {
     if (bilikData) {
       setSemuaBilik(bilikData);
       if (ustazSemasa) {
-        const sayaPunya = bilikData.find(b => b.perawat_semasa_id === ustazSemasa.id);
+        const sayaPunya = bilikData.find(b => String(b.perawat_semasa_id) === String(ustazSemasa.id));
         setBilikAktif(sayaPunya || null);
       }
     }
@@ -139,7 +156,7 @@ export default function KonsolPerawat() {
     const { count } = await supabase
       .from('giliran')
       .select('*', { count: 'exact', head: true })
-      .eq('perawat_id', ustazSemasa.id)
+      .or(`perawat_id.is.null,perawat_id.eq.${ustazSemasa.id}`)
       .eq('status', 'menunggu');
 
     setBilanganMenunggu(count || 0);
@@ -151,6 +168,16 @@ export default function KonsolPerawat() {
     setMemproses(true);
 
     try {
+      await supabase
+        .from('bilik_rawatan')
+        .update({
+          perawat_semasa_id: null,
+          sesi: null,
+          status: 'kosong',
+          waktu_check_in: null
+        })
+        .eq('perawat_semasa_id', ustazSemasa.id);
+
       const { error } = await supabase
         .from('bilik_rawatan')
         .update({
@@ -164,9 +191,9 @@ export default function KonsolPerawat() {
       if (error) throw error;
 
       await muatDataBilik();
-      alert('Berjaya check-in ke bilik! Sistem TV dan Giliran kini aktif.');
+      paparNotifikasi('Berjaya check-in ke bilik! Sistem TV dan giliran kini aktif.');
     } catch (err: any) {
-      alert('Ralat semasa check-in bilik: ' + err.message);
+      paparNotifikasi('Ralat semasa check-in: ' + err.message, 'ralat');
     } finally {
       setMemproses(false);
     }
@@ -174,30 +201,38 @@ export default function KonsolPerawat() {
 
   // 5. Tindakan: CHECK-OUT BILIK
   const tanganiCheckOut = async () => {
-    if (!bilikAktif) return;
-    const sah = window.confirm(`Adakah anda pasti mahu tamat syif dan lepaskan ${bilikAktif.nama_bilik}?`);
-    if (!sah) return;
-
+    if (!bilikAktif && !ustazSemasa) return;
     setMemproses(true);
+
     try {
-      const { error } = await supabase
+      const idBilikLepas = bilikAktif?.id;
+
+      let query = supabase
         .from('bilik_rawatan')
         .update({
           perawat_semasa_id: null,
           sesi: null,
           status: 'kosong',
           waktu_check_in: null
-        })
-        .eq('id', bilikAktif.id);
+        });
 
+      if (idBilikLepas && ustazSemasa) {
+        query = query.or(`id.eq.${idBilikLepas},perawat_semasa_id.eq.${ustazSemasa.id}`);
+      } else if (idBilikLepas) {
+        query = query.eq('id', idBilikLepas);
+      } else if (ustazSemasa) {
+        query = query.eq('perawat_semasa_id', ustazSemasa.id);
+      }
+
+      const { error } = await query;
       if (error) throw error;
 
       setBilikAktif(null);
       setBilikPilihanId(null);
       await muatDataBilik();
-      alert('Bilik berjaya dilepaskan. Sedia untuk perawat seterusnya.');
+      paparNotifikasi('Bilik berjaya dilepaskan. Sedia untuk perawat seterusnya.');
     } catch (err: any) {
-      alert('Ralat semasa check-out bilik: ' + err.message);
+      paparNotifikasi('Ralat semasa check-out: ' + err.message, 'ralat');
     } finally {
       setMemproses(false);
     }
@@ -206,35 +241,129 @@ export default function KonsolPerawat() {
   // 6. Panggil Pesakit Seterusnya
   const panggilPesakitSeterusnya = async () => {
     if (!ustazSemasa || !bilikAktif) {
-      alert('Sila check-in ke bilik rawatan terlebih dahulu sebelum memanggil pesakit.');
+      paparNotifikasi('Sila check-in ke bilik rawatan terlebih dahulu sebelum memanggil pesakit.', 'ralat');
       return;
     }
 
     setMemproses(true);
     try {
-      const { data: giliranSeterusnya } = await supabase
+      const { data: giliranSeterusnya, error: errCari } = await supabase
         .from('giliran')
-        .select('id')
-        .eq('perawat_id', ustazSemasa.id)
+        .select('id, no_giliran')
+        .or(`perawat_id.is.null,perawat_id.eq.${ustazSemasa.id}`)
         .eq('status', 'menunggu')
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
+      if (errCari) throw errCari;
+
       if (!giliranSeterusnya) {
-        alert('Tiada pesakit lagi dalam barisan menunggu.');
-        setMemproses(false);
+        paparNotifikasi('Tiada pesakit lagi dalam barisan menunggu.', 'ralat');
         return;
       }
 
-      await supabase
+      const masaKini = new Date().toISOString();
+      const { error: errUpdate } = await supabase
         .from('giliran')
-        .update({ status: 'sedang_rawat' })
+        .update({ 
+          perawat_id: ustazSemasa.id,
+          status: 'sedang_rawat',
+          waktu_panggil: masaKini
+        })
         .eq('id', giliranSeterusnya.id);
 
-      muatSemulaGiliran();
+      if (errUpdate) throw errUpdate;
+
+      paparNotifikasi(`Nombor ${giliranSeterusnya.no_giliran} sedang dipanggil di skrin TV!`);
+      await muatSemulaGiliran();
     } catch (err: any) {
-      alert('Ralat memanggil pesakit: ' + err.message);
+      paparNotifikasi('Ralat memanggil pesakit: ' + err.message, 'ralat');
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  // 7. PANGGIL SEMULA PESAKIT (RECALL KE TV - TANPA ALERT SEKATAN)
+  const panggilSemula = async () => {
+    if (!giliranAktif) return;
+    setMemproses(true);
+
+    try {
+      const masaKini = new Date().toISOString();
+
+      // Kemas kini waktu_panggil untuk memicu audio TV
+      const { error } = await supabase
+        .from('giliran')
+        .update({
+          status: 'sedang_rawat',
+          waktu_panggil: masaKini
+        })
+        .eq('id', giliranAktif.id);
+
+      if (error) {
+        // Sandaran jika lajur waktu_panggil tiada
+        await supabase
+          .from('giliran')
+          .update({ status: 'sedang_rawat' })
+          .eq('id', giliranAktif.id);
+      }
+
+      paparNotifikasi(`Panggilan semula nombor ${giliranAktif.no_giliran} telah dihantar ke skrin TV!`);
+    } catch (err: any) {
+      paparNotifikasi('Ralat panggil semula: ' + err.message, 'ralat');
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  // 8. LANGKAU PESAKIT (QUEUE BALIK - SATU KLIK TERUS BERFUNGSI)
+  const langkauPesakit = async () => {
+    if (!giliranAktif) return;
+    setMemproses(true);
+
+    try {
+      const idPesakitLangkau = giliranAktif.id;
+      const noGiliranLangkau = giliranAktif.no_giliran;
+      const masaSekarang = new Date().toISOString();
+
+      // Kemas kini status ke 'menunggu', lepaskan bilik perawat, dan letakkan di hujung barisan
+      const { error } = await supabase
+        .from('giliran')
+        .update({
+          status: 'menunggu',
+          perawat_id: null,
+          waktu_panggil: null,
+          created_at: masaSekarang
+        })
+        .eq('id', idPesakitLangkau);
+
+      if (error) {
+        // Sandaran sekiranya pangkalan data tidak membenarkan ubah created_at
+        await supabase
+          .from('giliran')
+          .update({
+            status: 'menunggu',
+            perawat_id: null,
+            waktu_panggil: null
+          })
+          .eq('id', idPesakitLangkau);
+      }
+
+      // Kosongkan kad pesakit semasa di konsol perawat
+      setReaksiDipilih([]);
+      setPenawarDipilih({});
+      setItemTambahan('');
+      setHargaTambahan('');
+      setPerluMC(false);
+      setTempohMC(1);
+      setSebabMC(SEBAB_MC_PRESET[0]);
+      setGiliranAktif(null);
+
+      await muatSemulaGiliran();
+      paparNotifikasi(`Nombor ${noGiliranLangkau} telah dilangkau dan dimasukkan semula ke barisan menunggu.`);
+    } catch (err: any) {
+      paparNotifikasi('Ralat melangkau pesakit: ' + err.message, 'ralat');
     } finally {
       setMemproses(false);
     }
@@ -260,7 +389,7 @@ export default function KonsolPerawat() {
   const nilaiHargaTambahan = parseFloat(hargaTambahan) || 0;
   const jumlahKeseluruhan = jumlahPenawarPiawai + nilaiHargaTambahan;
 
-  // 7. Hantar Rawatan & Data Sijil MC ke Farmasi
+  // 9. Hantar Rawatan & Data Sijil MC ke Farmasi
   const hantarLaporanKeFarmasi = async () => {
     if (!giliranAktif || !ustazSemasa) return;
     setMemproses(true);
@@ -327,7 +456,6 @@ export default function KonsolPerawat() {
         .update({ status: 'ke_farmasi', waktu_selesai: new Date().toISOString() })
         .eq('id', giliranAktif.id);
 
-      // Reset
       setReaksiDipilih([]);
       setPenawarDipilih({});
       setItemTambahan('');
@@ -336,11 +464,11 @@ export default function KonsolPerawat() {
       setTempohMC(1);
       setSebabMC(SEBAB_MC_PRESET[0]);
       setGiliranAktif(null);
-      muatSemulaGiliran();
+      await muatSemulaGiliran();
 
-      alert('Laporan rawatan berjaya dihantar ke Kaunter Farmasi!');
+      paparNotifikasi('Laporan rawatan berjaya dihantar ke Kaunter Farmasi!');
     } catch (err: any) {
-      alert('Ralat: ' + err.message);
+      paparNotifikasi('Ralat: ' + err.message, 'ralat');
     } finally {
       setMemproses(false);
     }
@@ -354,6 +482,27 @@ export default function KonsolPerawat() {
             ← Menu Utama
           </Link>
         </div>
+
+        {/* Banner Notifikasi Terapung (Maklum Balas Visual Bebas Ralat Pelayar) */}
+        {notifikasiMesej && (
+          <div style={{
+            backgroundColor: notifikasiMesej.jenis === 'sukses' ? '#065f46' : '#7f1d1d',
+            border: `1px solid ${notifikasiMesej.jenis === 'sukses' ? '#10b981' : '#ef4444'}`,
+            borderRadius: '0.5rem',
+            padding: '0.75rem 1rem',
+            color: '#ffffff',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            marginBottom: '0.85rem',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+          }}>
+            {notifikasiMesej.jenis === 'sukses' ? <CheckCircle2 size={18} color="#34d399" /> : <AlertCircle size={18} color="#f87171" />}
+            <span>{notifikasiMesej.teks}</span>
+          </div>
+        )}
 
         {/* Profil Ustaz Bertugas */}
         <header className={styles.header}>
@@ -377,14 +526,14 @@ export default function KonsolPerawat() {
           </select>
         </header>
 
-        {/* ===================== MODUL CHECK-IN / CHECK-OUT ===================== */}
+        {/* MODUL CHECK-IN / CHECK-OUT */}
         {bilikAktif ? (
           <div className={styles.activeRoomBanner}>
             <div className={styles.roomInfoActive}>
               <span>Sedang Bertugas di:</span><br />
               <strong>{bilikAktif.nama_bilik}</strong> ({bilikAktif.sesi === 'pagi' ? 'Sesi Pagi' : 'Sesi Malam'})
             </div>
-            <button onClick={tanganiCheckOut} disabled={memproses} className={styles.btnCheckOut}>
+            <button type="button" onClick={tanganiCheckOut} disabled={memproses} className={styles.btnCheckOut}>
               <LogOut size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
               Tamat Syif / Lepas Bilik
             </button>
@@ -395,7 +544,6 @@ export default function KonsolPerawat() {
             <h2 className={styles.checkInTitle}>Check-In Bilik Rawatan</h2>
             <p className={styles.checkInSub}>Sila pilih sesi dan bilik fizikal yang anda gunakan hari ini:</p>
 
-            {/* Pilihan Sesi */}
             <div className={styles.sessionSelector}>
               <button
                 type="button"
@@ -413,10 +561,9 @@ export default function KonsolPerawat() {
               </button>
             </div>
 
-            {/* Pilihan Bilik Rawatan */}
             <div className={styles.roomGridSelect}>
               {semuaBilik.map((b) => {
-                const sedangDipakaiOrangLain = Boolean(b.perawat_semasa_id && b.perawat_semasa_id !== ustazSemasa?.id);
+                const sedangDipakaiOrangLain = Boolean(b.perawat_semasa_id && String(b.perawat_semasa_id) !== String(ustazSemasa?.id));
                 const dipilihSaya = bilikPilihanId === b.id;
 
                 return (
@@ -478,6 +625,55 @@ export default function KonsolPerawat() {
                     Alamat: {giliranAktif.pesakit?.alamat}
                   </p>
                 )}
+
+                {/* Butang Panggil Semula & Butang Langkau */}
+                <div style={{ marginTop: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={panggilSemula}
+                    disabled={memproses}
+                    className={styles.btnCall}
+                    style={{
+                      padding: '0.65rem 0.5rem',
+                      fontSize: '0.85rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      justifyContent: 'center',
+                      backgroundColor: '#0284c7',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Bell size={16} /> Panggil Semula
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={langkauPesakit}
+                    disabled={memproses}
+                    className={styles.btnCall}
+                    style={{
+                      padding: '0.65rem 0.5rem',
+                      fontSize: '0.85rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      justifyContent: 'center',
+                      backgroundColor: '#d97706',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <RotateCcw size={16} /> Langkau (Queue Balik)
+                  </button>
+                </div>
               </div>
             ) : (
               <div className={styles.waitingEmpty}>
@@ -485,6 +681,7 @@ export default function KonsolPerawat() {
                   Tiada pesakit sedang dirawat di {bilikAktif.nama_bilik}.
                 </p>
                 <button
+                  type="button"
                   onClick={panggilPesakitSeterusnya}
                   disabled={memproses || bilanganMenunggu === 0}
                   className={styles.btnCall}
@@ -579,7 +776,7 @@ export default function KonsolPerawat() {
                 <span className={styles.totalLabel}>Jumlah Keseluruhan</span>
                 <span className={styles.totalAmount}>RM {jumlahKeseluruhan.toFixed(2)}</span>
               </div>
-              <button onClick={hantarLaporanKeFarmasi} disabled={memproses} className={styles.btnSubmit}>
+              <button type="button" onClick={hantarLaporanKeFarmasi} disabled={memproses} className={styles.btnSubmit}>
                 <Send size={18} />
                 <span>{memproses ? 'Menghantar...' : 'Selesai & Hantar'}</span>
               </button>

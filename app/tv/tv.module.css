@@ -1,5 +1,5 @@
 /* ========================================================
-   1. BEKAS UTAMA SKRIN TV (DIKUNCI 100VH & MESRA ANDROID TV)
+   1. BEKAS UTAMA SKRIN TV (DIKUNCI 100VH & KALIS ANDROID TV)
    ======================================================== */
 .tvContainer {
   height: 100vh;
@@ -12,18 +12,28 @@
     radial-gradient(circle at 88% 85%, rgba(0, 135, 144, 0.07) 0%, transparent 50%),
     url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 0l10 15 15-5-5 15 15 10-15 10 5 15-15-5-10 15-10-15-15 5 5-15-15-10 15-10-5-15 15 5z' fill='%23008790' fill-opacity='0.02' fill-rule='evenodd'/%3E%3Ccircle cx='40' cy='40' r='18' stroke='%2300c5cd' stroke-opacity='0.02' fill='none' stroke-width='1'/%3E%3C/svg%3E");
   color: #0f2730;
-  padding: clamp(0.5rem, 1.4vh, 1rem) clamp(1rem, 2vw, 2rem) clamp(0.4rem, 1vh, 0.8rem) clamp(1rem, 2vw, 2rem);
+  /* Zon Selamat TV (TV Safe Zone): Jarak sisi seimbang elak bucu terpotong bezel TV */
+  padding: clamp(0.5rem, 1.4vh, 0.9rem) clamp(1rem, 2.2vw, 2.2rem) clamp(0.4rem, 1vh, 0.75rem) clamp(1rem, 2.2vw, 2.2rem);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  user-select: none;
   position: relative;
 }
 
+/* Sembunyikan semua palang skrol pelayar di Android TV */
+.tvContainer::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* ========================================================
-   ZON PANGKAH SKRIN PENUH (TERSEMBUNYI / HOVER SAHAJA)
+   ZON PANGKAH SKRIN PENUH
    ======================================================== */
 .exitZone {
   position: fixed;
@@ -41,8 +51,8 @@
   background: rgba(15, 39, 48, 0.7);
   border: 1.5px solid rgba(255, 255, 255, 0.4);
   color: #ffffff;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -70,20 +80,21 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: clamp(0.4rem, 1vh, 0.9rem);
   min-height: 0;
+  gap: clamp(0.4rem, 0.9vh, 0.75rem);
+  overflow: hidden;
 }
 
 .audioBanner {
   background-color: #e0f7f9;
   border: 1.5px solid #00a8b5;
   color: #005f67;
-  padding: 0.45rem 1rem;
+  padding: 0.4rem 1rem;
   border-radius: 0.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   box-shadow: 0 4px 12px rgba(0, 168, 181, 0.15);
   flex-shrink: 0;
 }
@@ -93,10 +104,10 @@
   color: #ffffff;
   font-weight: 750;
   border: none;
-  padding: 0.4rem 1rem;
+  padding: 0.35rem 0.9rem;
   border-radius: 0.4rem;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
 }
 
 /* ========================================================
@@ -106,8 +117,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1.25rem;
-  padding-bottom: clamp(0.35rem, 0.8vh, 0.65rem);
+  gap: 1rem;
+  padding-bottom: clamp(0.3rem, 0.7vh, 0.55rem);
   border-bottom: 1.5px solid #d1eaed;
   flex-shrink: 0;
 }
@@ -115,50 +126,53 @@
 .clinicBrand {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.75rem;
   flex-shrink: 0;
 }
 
 .logoImage {
-  height: clamp(42px, 5.5vh, 60px);
+  height: clamp(38px, 5vh, 52px);
   width: auto;
-  filter: drop-shadow(0 4px 10px rgba(0, 135, 144, 0.22));
+  filter: drop-shadow(0 4px 10px rgba(0, 135, 144, 0.2));
 }
 
 .welcomeText {
-  font-size: clamp(0.72rem, 1.2vh, 0.85rem);
+  font-size: clamp(0.68rem, 1.1vh, 0.8rem);
   color: #55757d;
   font-weight: 600;
   margin: 0;
   display: block;
+  line-height: 1.1;
 }
 
 .clinicTitleText {
-  font-size: clamp(1.15rem, 2.2vh, 1.5rem);
+  font-size: clamp(1.1rem, 2vh, 1.4rem);
   font-weight: 900;
   color: #007b85;
   margin: 0;
   letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .islamicInfoBar {
   display: flex;
   align-items: center;
-  gap: clamp(0.75rem, 1.4vw, 1.25rem);
+  gap: clamp(0.6rem, 1.2vw, 1.1rem);
   background: rgba(255, 255, 255, 0.95);
   border: 1.5px solid #d4edf0;
-  border-radius: 0.85rem;
-  padding: 0.4rem 1.1rem;
-  box-shadow: 0 8px 20px -6px rgba(0, 135, 144, 0.1);
+  border-radius: 0.75rem;
+  padding: 0.35rem 0.95rem;
+  box-shadow: 0 6px 16px -4px rgba(0, 135, 144, 0.1);
+  flex-shrink: 0;
 }
 
 .weatherWidget {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   border-right: 1.5px solid #e2f2f4;
-  padding-right: 0.85rem;
-  font-size: clamp(0.85rem, 1.5vh, 1rem);
+  padding-right: 0.75rem;
+  font-size: clamp(0.8rem, 1.4vh, 0.92rem);
   color: #008790;
   font-weight: 800;
 }
@@ -166,25 +180,26 @@
 .prayerTimesStrip {
   display: flex;
   align-items: center;
-  gap: clamp(0.6rem, 1vw, 1rem);
+  gap: clamp(0.5rem, 0.9vw, 0.9rem);
 }
 
 .prayerItem {
   display: flex;
   flex-direction: column;
   align-items: center;
+  line-height: 1.1;
 }
 
 .prayerName {
   color: #64748b;
   text-transform: uppercase;
-  font-size: clamp(0.62rem, 1vh, 0.72rem);
+  font-size: clamp(0.58rem, 0.95vh, 0.68rem);
   font-weight: 800;
 }
 
 .prayerTime {
   color: #1e293b;
-  font-size: clamp(0.85rem, 1.5vh, 1rem);
+  font-size: clamp(0.8rem, 1.4vh, 0.95rem);
   font-weight: 750;
 }
 
@@ -194,7 +209,7 @@
 
 .prayerActive .prayerTime {
   color: #008790;
-  font-size: clamp(0.95rem, 1.7vh, 1.12rem);
+  font-size: clamp(0.88rem, 1.5vh, 1.05rem);
   font-weight: 900;
 }
 
@@ -204,31 +219,32 @@
 }
 
 .digitalTime {
-  font-size: clamp(1.6rem, 3.4vh, 2.1rem);
+  font-size: clamp(1.5rem, 3.2vh, 2rem);
   font-weight: 900;
   color: #007b85;
   line-height: 1;
 }
 
 .digitalDate {
-  font-size: clamp(0.72rem, 1.2vh, 0.82rem);
+  font-size: clamp(0.68rem, 1.1vh, 0.78rem);
   color: #55757d;
   font-weight: 600;
-  margin-top: 0.15rem;
+  margin-top: 0.1rem;
 }
 
 /* ========================================================
-   3. SUSUN ATUR UTAMA: GRID ANTI-BERTINDIH ANDROID TV
+   3. SUSUN ATUR UTAMA: GRID ANTI-TERIKAT (16:9 PROPORTIONAL)
    ======================================================== */
 .mainLayout {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.45fr);
-  grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: clamp(0.6rem, 1.3vh, 1.1rem) clamp(0.8rem, 1.5vw, 1.5rem);
+  grid-template-columns: minmax(0, 0.98fr) minmax(0, 1.42fr);
+  grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: clamp(0.5rem, 1.1vh, 0.9rem) clamp(0.75rem, 1.4vw, 1.35rem);
   flex: 1;
   min-height: 0;
   min-width: 0;
   align-items: stretch;
+  overflow: hidden;
 }
 
 /* ========================================================
@@ -239,14 +255,14 @@
   border: 1.5px solid rgba(255, 255, 255, 0.4);
   border-radius: 1.15rem;
   color: #ffffff;
-  padding: clamp(0.85rem, 1.6vh, 1.4rem) clamp(1rem, 2vw, 1.8rem);
+  padding: clamp(0.7rem, 1.4vh, 1.2rem) clamp(0.9rem, 1.6vw, 1.5rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
   text-align: center;
   box-shadow: 
-    0 18px 36px -8px rgba(0, 135, 144, 0.38),
+    0 16px 32px -8px rgba(0, 135, 144, 0.35),
     inset 0 1.5px 2px rgba(255, 255, 255, 0.35);
   position: relative;
   height: 100%;
@@ -265,14 +281,14 @@
 }
 
 .nowSeeingTitle {
-  font-size: clamp(0.95rem, 1.8vh, 1.25rem);
+  font-size: clamp(0.9rem, 1.7vh, 1.15rem);
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .nowSeeingSubtitle {
-  font-size: clamp(0.7rem, 1.2vh, 0.82rem);
+  font-size: clamp(0.65rem, 1.1vh, 0.78rem);
   font-weight: 700;
   letter-spacing: 0.1em;
   color: #c9f5f7;
@@ -280,13 +296,13 @@
 }
 
 .activeNumber {
-  font-size: clamp(3.6rem, 8.8vh, 5.6rem);
+  font-size: clamp(3.2rem, 8.2vh, 5.2rem);
   font-weight: 950;
   color: #9ee82b;
   line-height: 0.95;
   letter-spacing: -0.04em;
-  margin: 0.2rem 0;
-  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  margin: 0.15rem 0;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -295,15 +311,15 @@
 }
 
 .wheelchairIcon {
-  font-size: clamp(2rem, 4.5vh, 2.8rem);
+  font-size: clamp(1.8rem, 4vh, 2.5rem);
   color: #fef08a;
 }
 
 .patientName {
-  font-size: clamp(1.1rem, 2.3vh, 1.45rem);
+  font-size: clamp(1rem, 2.1vh, 1.35rem);
   font-weight: 750;
   color: #ffffff;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.25rem;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   white-space: nowrap;
   overflow: hidden;
@@ -315,27 +331,27 @@
 .proceedBox {
   width: 100%;
   border-top: 1px solid rgba(255, 255, 255, 0.25);
-  padding-top: clamp(0.35rem, 0.8vh, 0.6rem);
+  padding-top: clamp(0.3rem, 0.7vh, 0.5rem);
   flex-shrink: 0;
 }
 
 .proceedLabel {
-  font-size: clamp(0.75rem, 1.3vh, 0.88rem);
+  font-size: clamp(0.7rem, 1.2vh, 0.82rem);
   font-weight: 600;
   color: #d1f7f9;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.1rem;
 }
 
 .roomDestinationRow {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(0.75rem, 1.5vw, 1.15rem);
-  margin-bottom: 0.15rem;
+  gap: clamp(0.6rem, 1.2vw, 1rem);
+  margin-bottom: 0.1rem;
 }
 
 .roomDestination {
-  font-size: clamp(1.9rem, 4.2vh, 2.8rem);
+  font-size: clamp(1.7rem, 3.8vh, 2.5rem);
   font-weight: 950;
   color: #ffffff;
   letter-spacing: -0.01em;
@@ -345,18 +361,18 @@
 .arrowCircle {
   background-color: #9ee82b;
   color: #005a60;
-  width: clamp(38px, 4.5vh, 48px);
-  height: clamp(38px, 4.5vh, 48px);
+  width: clamp(34px, 4vh, 42px);
+  height: clamp(34px, 4vh, 42px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
   flex-shrink: 0;
 }
 
 .perawatName {
-  font-size: clamp(0.78rem, 1.4vh, 0.92rem);
+  font-size: clamp(0.74rem, 1.3vh, 0.86rem);
   color: #c9f5f7;
   white-space: nowrap;
   overflow: hidden;
@@ -368,7 +384,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
+  padding: 1.5rem 1rem;
   color: #c9f5f7;
 }
 
@@ -379,7 +395,7 @@
   background: #ffffff;
   border-radius: 1.15rem;
   border: 1.5px solid #d4edf0;
-  box-shadow: 0 14px 32px -8px rgba(0, 135, 144, 0.15);
+  box-shadow: 0 12px 28px -6px rgba(0, 135, 144, 0.14);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -392,7 +408,7 @@
 .doctorStatusHeader {
   background-color: #008790;
   color: #ffffff;
-  padding: clamp(0.5rem, 1.1vh, 0.75rem) 1.25rem;
+  padding: clamp(0.45rem, 1vh, 0.65rem) 1.15rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -400,12 +416,12 @@
 }
 
 .doctorStatusTitle {
-  font-size: clamp(0.9rem, 1.7vh, 1.1rem);
+  font-size: clamp(0.85rem, 1.6vh, 1.05rem);
   font-weight: 900;
   letter-spacing: 0.06em;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   text-transform: uppercase;
 }
 
@@ -413,9 +429,9 @@
   background-color: rgba(255, 255, 255, 0.22);
   border: 1px solid rgba(255, 255, 255, 0.45);
   color: #ffffff;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  padding: 0.15rem 0.6rem;
+  padding: 0.12rem 0.55rem;
   border-radius: 9999px;
 }
 
@@ -428,13 +444,12 @@
 
 .roomRow {
   display: grid;
-  grid-template-columns: 1.5fr 1.5fr 0.9fr;
+  grid-template-columns: 1.4fr 1.6fr 0.9fr;
   align-items: center;
-  padding: 0 1.25rem;
-  border-bottom: 2px solid #d4edf0;
+  padding: 0 1.15rem;
+  border-bottom: 1.5px solid #e6f5f7;
   flex: 1;
   min-height: 0;
-  transition: background-color 0.2s;
 }
 
 .roomRow:last-child {
@@ -453,7 +468,7 @@
 }
 
 .roomLabelTitle {
-  font-size: clamp(0.92rem, 1.7vh, 1.1rem);
+  font-size: clamp(0.85rem, 1.6vh, 1.02rem);
   font-weight: 950;
   color: #007b85;
   text-transform: uppercase;
@@ -462,7 +477,7 @@
 }
 
 .roomDoctorName {
-  font-size: clamp(0.85rem, 1.6vh, 1.05rem);
+  font-size: clamp(0.8rem, 1.5vh, 0.95rem);
   font-weight: 550;
   color: #1e293b;
   white-space: nowrap;
@@ -485,10 +500,10 @@
 .statusSeeing {
   color: #16a34a;
   font-weight: 800;
-  font-size: clamp(0.82rem, 1.5vh, 0.95rem);
+  font-size: clamp(0.78rem, 1.4vh, 0.9rem);
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -497,14 +512,14 @@
 .statusAvailable {
   color: #0d9488;
   font-weight: 750;
-  font-size: clamp(0.82rem, 1.5vh, 0.92rem);
+  font-size: clamp(0.78rem, 1.4vh, 0.88rem);
   white-space: nowrap;
 }
 
 .statusClosed {
   color: #94a3b8;
   font-weight: 600;
-  font-size: clamp(0.78rem, 1.4vh, 0.88rem);
+  font-size: clamp(0.74rem, 1.3vh, 0.84rem);
   font-style: italic;
   white-space: nowrap;
 }
@@ -519,9 +534,9 @@
   background-color: #fee2e2;
   border: 1px solid #ef4444;
   color: #b91c1c;
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.45rem;
-  font-size: clamp(0.72rem, 1.3vh, 0.82rem);
+  padding: 0.2rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: clamp(0.68rem, 1.2vh, 0.78rem);
   font-weight: 800;
 }
 
@@ -529,9 +544,9 @@
   background-color: #e0f7f9;
   border: 1px solid #00a8b5;
   color: #007b85;
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.45rem;
-  font-size: clamp(0.72rem, 1.3vh, 0.82rem);
+  padding: 0.2rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: clamp(0.68rem, 1.2vh, 0.78rem);
   font-weight: 800;
 }
 
@@ -539,9 +554,9 @@
   background-color: #f1f5f9;
   border: 1px solid #cbd5e1;
   color: #64748b;
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.45rem;
-  font-size: clamp(0.72rem, 1.3vh, 0.82rem);
+  padding: 0.2rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: clamp(0.68rem, 1.2vh, 0.78rem);
   font-weight: 700;
 }
 
@@ -552,74 +567,12 @@
 }
 
 .pulseDot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   background-color: #16a34a;
   border-radius: 50%;
   display: inline-block;
   animation: pulseDot 1.4s infinite;
-  flex-shrink: 0;
-}
-
-/* ========================================================
-   BARIS 2 KIRI: PERINGATAN PESAKIT
-   ======================================================== */
-.fixedNoticeCard {
-  background: #ffffff;
-  border: 1.5px solid #d4edf0;
-  border-radius: 1.15rem;
-  padding: clamp(0.7rem, 1.4vh, 1.1rem) clamp(0.9rem, 1.5vw, 1.35rem);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: clamp(0.4rem, 0.9vh, 0.8rem);
-  box-shadow: 0 12px 28px -6px rgba(0, 135, 144, 0.12);
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.noticeItemRow {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.roundIconTeal {
-  width: clamp(34px, 4vh, 40px);
-  height: clamp(34px, 4vh, 40px);
-  border-radius: 50%;
-  background-color: #008790;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.noticeContentTitle {
-  font-size: clamp(0.82rem, 1.5vh, 0.92rem);
-  font-weight: 850;
-  color: #007b85;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.1rem;
-}
-
-.noticeContentDesc {
-  font-size: clamp(0.74rem, 1.3vh, 0.84rem);
-  color: #55757d;
-  line-height: 1.3;
-  margin: 0;
-  font-weight: 550;
-}
-
-.noticeDivider {
-  height: 1px;
-  background-color: #e5f4f6;
-  width: 100%;
   flex-shrink: 0;
 }
 
@@ -630,11 +583,11 @@
   background: #ffffff;
   border: 1.5px solid #d4edf0;
   border-radius: 1.15rem;
-  padding: clamp(0.7rem, 1.4vh, 1.1rem) clamp(0.9rem, 1.5vw, 1.35rem);
+  padding: clamp(0.6rem, 1.2vh, 0.95rem) clamp(0.85rem, 1.4vw, 1.25rem);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  box-shadow: 0 12px 28px -6px rgba(0, 135, 144, 0.12);
+  box-shadow: 0 10px 24px -6px rgba(0, 135, 144, 0.12);
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -645,13 +598,13 @@
 .waitingHeaderRow {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   color: #007b85;
-  font-size: clamp(0.88rem, 1.6vh, 0.98rem);
+  font-size: clamp(0.82rem, 1.5vh, 0.92rem);
   font-weight: 850;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: clamp(0.5rem, 1.2vh, 0.85rem);
+  margin-bottom: clamp(0.4rem, 0.9vh, 0.65rem);
   flex-shrink: 0;
 }
 
@@ -659,7 +612,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: clamp(0.5rem, 1vw, 0.85rem);
+  gap: clamp(0.45rem, 0.9vw, 0.75rem);
   overflow: hidden;
 }
 
@@ -667,40 +620,41 @@
   background: linear-gradient(135deg, #009ea8 0%, #008790 100%);
   border: 1.5px solid #38bdf8;
   color: #ffffff;
-  padding: clamp(0.4rem, 1vh, 0.65rem) clamp(0.9rem, 1.6vw, 1.35rem);
-  border-radius: 0.65rem;
-  font-size: clamp(1.25rem, 2.8vh, 1.65rem);
+  padding: clamp(0.35rem, 0.8vh, 0.55rem) clamp(0.8rem, 1.4vw, 1.15rem);
+  border-radius: 0.6rem;
+  font-size: clamp(1.15rem, 2.5vh, 1.5rem);
   font-weight: 950;
   letter-spacing: 0.06em;
-  box-shadow: 0 4px 12px rgba(0, 135, 144, 0.28);
+  box-shadow: 0 4px 10px rgba(0, 135, 144, 0.24);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 /* ========================================================
-   4. PALANG MAKLUMAN BERGERAK (TERAPUNG DENGAN KEMAS)
+   4. PALANG MAKLUMAN BERGERAK (TIADA SCROLLBAR BAWAH)
    ======================================================== */
 .tickerFooter {
   background: linear-gradient(90deg, #008790 0%, #009ea8 50%, #008790 100%);
   border: 1.5px solid #00c5cd;
   border-radius: 0.85rem;
-  padding: clamp(0.5rem, 1vh, 0.75rem) 0;
-  margin: clamp(0.2rem, 0.6vh, 0.4rem) 0 0 0;
+  padding: 0;
+  margin-top: clamp(0.15rem, 0.4vh, 0.35rem);
+  height: clamp(38px, 4.8vh, 46px);
+  max-height: clamp(38px, 4.8vh, 46px);
   display: flex;
   align-items: center;
   overflow: hidden;
   white-space: nowrap;
   position: relative;
-  box-shadow: 0 8px 20px -4px rgba(0, 135, 144, 0.3);
-  min-height: clamp(42px, 5.5vh, 52px);
+  box-shadow: 0 6px 18px -4px rgba(0, 135, 144, 0.28);
   flex-shrink: 0;
 }
 
 .tickerTrack {
   display: inline-block;
   padding-left: 100%;
-  animation: marquee 160s linear infinite;
+  animation: marquee 220s linear infinite;
 }
 
 .tickerTrack:hover {
@@ -710,13 +664,13 @@
 .tickerItem {
   display: inline-flex;
   align-items: center;
-  gap: 1.15rem;
-  margin-right: 6rem;
+  gap: 1rem;
+  margin-right: 5.5rem;
 }
 
 .arabicText {
   font-family: "Amiri", "Traditional Arabic", serif;
-  font-size: clamp(1.2rem, 2.6vh, 1.6rem);
+  font-size: clamp(1.1rem, 2.4vh, 1.45rem);
   color: #e6fffa;
   direction: rtl;
   font-weight: 700;
@@ -725,7 +679,7 @@
 .translationText {
   color: #ffffff;
   font-style: normal !important;
-  font-size: clamp(0.95rem, 2vh, 1.15rem);
+  font-size: clamp(0.88rem, 1.8vh, 1.05rem);
   font-weight: 700;
 }
 
@@ -733,17 +687,17 @@
   background-color: rgba(255, 255, 255, 0.22);
   color: #ffffff;
   font-weight: 800;
-  font-size: clamp(0.75rem, 1.4vh, 0.88rem);
-  padding: 0.18rem 0.6rem;
-  border-radius: 0.4rem;
+  font-size: clamp(0.7rem, 1.2vh, 0.82rem);
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.35rem;
 }
 
 .noticeTag {
   background-color: #9ee82b;
   color: #005a60;
   font-weight: 900;
-  font-size: clamp(0.72rem, 1.3vh, 0.82rem);
-  padding: 0.18rem 0.6rem;
+  font-size: clamp(0.68rem, 1.2vh, 0.78rem);
+  padding: 0.15rem 0.55rem;
   border-radius: 0.35rem;
   text-transform: uppercase;
 }
