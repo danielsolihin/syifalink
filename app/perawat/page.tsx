@@ -1,189 +1,323 @@
+// app/perawat/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Perawat } from '@/lib/types';
-import styles from './perawat.module.css';
-import { 
-  Send, 
-  Bell, 
-  PlusCircle, 
-  FileText, 
-  DoorOpen, 
-  LogOut, 
-  Accessibility, 
-  RotateCcw,
-  CheckCircle2,
-  AlertCircle
-} from 'lucide-react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import styles from './perawat.module.css';
+import {
+  User,
+  CheckCircle,
+  Clock,
+  Stethoscope,
+  LogOut,
+  Bell,
+  SkipForward,
+  FileText,
+  Pill,
+  AlertCircle,
+  DoorOpen,
+  Calendar,
+  Send,
+  Plus,
+  Minus,
+  Sparkles,
+  PlusCircle,
+  Play,
+  X
+} from 'lucide-react';
 
-interface ItemPenawar {
+interface Perawat {
   id: string;
-  nama_item: string;
-  harga: number;
+  nama: string;
+  no_bilik: string;
+  no_telefon?: string;
+  status_aktif: boolean;
 }
 
 interface BilikRawatan {
   id: number;
   nama_bilik: string;
   perawat_semasa_id: string | null;
-  sesi: string | null;
   status: string;
+  sesi: string | null;
+  status_aktif: boolean;
   perawat?: { nama: string };
 }
 
-const SENARAI_REAKSI = [
-  'Tenang / Tiada Reaksi',
-  'Sendawa / Menguap Kerap',
-  'Panas Tengkuk / Kepala',
-  'Gelisah / Sesak Dada',
-  'Menggigil / Menggeletar',
-  'Menjerit / Histeria'
-];
+interface Pesakit {
+  id: string;
+  nama: string;
+  no_ic: string;
+  no_telefon: string;
+  alamat?: string;
+}
 
-const SEBAB_MC_PRESET = [
-  'Kelesuan fizikal melampau selepas rawatan ruqyah intensif',
-  'Gangguan emosi & mental memerlukan rehat kendiri',
-  'Pening & loya kesan reaksi pembersihan ruqyah',
-  'Rehat mandian penawar & rawatan lanjutan di rumah'
+interface Giliran {
+  id: string;
+  no_giliran: string;
+  status: string;
+  waktu_panggil?: string;
+  pesakit_id: string;
+  perawat_id?: string | null;
+  pesakit?: Pesakit;
+}
+
+interface BahanPenawar {
+  id: string;
+  nama_item: string;
+  harga: number;
+  stok_semasa: number;
+  kategori: string;
+}
+
+interface ItemUbatDipilih {
+  id: string;
+  nama_item: string;
+  harga: number;
+  kuantiti: number;
+}
+
+const DEFAULT_REAKSI = [
+  'Sendawa Berterusan',
+  'Kerap Menguap / Mengantuk',
+  'Menangis / Hiba Tanpa Sebab',
+  'Panas / Menggigil Anggota Badan',
+  'Kebas / Berat Bahagian Belakang',
+  'Muntah / Rasa Loya',
+  'Kerasukan / Reaksi Agresif',
+  'Sesak Nafas / Dada Berdebar',
+  'Pengsan / Lemah Sendi',
+  'Tiada Sebarang Reaksi (Normal)'
 ];
 
 export default function KonsolPerawat() {
   const [senaraiPerawat, setSenaraiPerawat] = useState<Perawat[]>([]);
   const [ustazSemasa, setUstazSemasa] = useState<Perawat | null>(null);
 
-  // Status Bilik Dinamik
-  const [semuaBilik, setSemuaBilik] = useState<BilikRawatan[]>([]);
-  const [bilikAktif, setBilikAktif] = useState<BilikRawatan | null>(null);
+  // Status Bilik & Check-In
+  const [senaraiBilik, setSenaraiBilik] = useState<BilikRawatan[]>([]);
+  const [bilikSemasa, setBilikSemasa] = useState<BilikRawatan | null>(null);
+  const [sesiDipilih, setSesiDipilih] = useState<'Sesi Pagi' | 'Sesi Malam'>('Sesi Pagi');
   const [bilikPilihanId, setBilikPilihanId] = useState<number | null>(null);
-  const [sesiPilihan, setSesiPilihan] = useState<'pagi' | 'malam'>('pagi');
 
-  // Giliran Pesakit
-  const [giliranAktif, setGiliranAktif] = useState<any | null>(null);
-  const [bilanganMenunggu, setBilanganMenunggu] = useState(0);
-  const [senaraiPenawarDB, setSenaraiPenawarDB] = useState<ItemPenawar[]>([]);
+  // Barisan Giliran
+  const [senaraiMenunggu, setSenaraiMenunggu] = useState<Giliran[]>([]);
+  const [pesakitAktif, setPesakitAktif] = useState<Giliran | null>(null);
+  const [memproses, setMemproses] = useState<boolean>(false);
 
-  // Sesi Rawatan
+  // Diagnostik & Rawatan
+  const [senaraiReaksiDB, setSenaraiReaksiDB] = useState<string[]>(DEFAULT_REAKSI);
   const [reaksiDipilih, setReaksiDipilih] = useState<string[]>([]);
-  const [penawarDipilih, setPenawarDipilih] = useState<{ [id: string]: number }>({});
-  const [itemTambahan, setItemTambahan] = useState('');
-  const [hargaTambahan, setHargaTambahan] = useState('');
-  const [perluMC, setPerluMC] = useState(false);
-  const [tempohMC, setTempohMC] = useState(1);
-  const [sebabMC, setSebabMC] = useState(SEBAB_MC_PRESET[0]);
+  const [catatanRawatan, setCatatanRawatan] = useState<string>('');
+  const [senaraiBahan, setSenaraiBahan] = useState<BahanPenawar[]>([]);
+  const [ubatDipilih, setUbatDipilih] = useState<ItemUbatDipilih[]>([]);
+  const [perluMC, setPerluMC] = useState<boolean>(false);
+  const [bilanganHariMC, setBilanganHariMC] = useState<number>(1);
 
-  const [memproses, setMemproses] = useState(false);
-  const [notifikasiMesej, setNotifikasiMesej] = useState<{ teks: string; jenis: 'sukses' | 'ralat' } | null>(null);
+  // Ruangan Reaksi Tambahan
+  const [bukaInputTambahan, setBukaInputTambahan] = useState<boolean>(false);
+  const [inputTeksTambahan, setInputTeksTambahan] = useState<string>('');
 
-  const paparNotifikasi = (teks: string, jenis: 'sukses' | 'ralat' = 'sukses') => {
-    setNotifikasiMesej({ teks, jenis });
-    setTimeout(() => setNotifikasiMesej(null), 4000);
-  };
-
-  // 1. Muat Turun Data Asas
-  const inisialisasi = async () => {
-    const { data: perawatData } = await supabase
-      .from('perawat')
-      .select('*')
-      .order('nama', { ascending: true });
-
-    if (perawatData && perawatData.length > 0) {
-      setSenaraiPerawat(perawatData);
-      if (!ustazSemasa) setUstazSemasa(perawatData[0]);
-    }
-
-    const { data: penawarData } = await supabase
-      .from('bahan_penawar')
-      .select('id, nama_item, harga');
-
-    if (penawarData) setSenaraiPenawarDB(penawarData);
-  };
-
-  // 2. Semak Status Bilik Dinamik Masa Nyata
-  const muatDataBilik = async () => {
-    const { data: bilikData } = await supabase
-      .from('bilik_rawatan')
-      .select('*, perawat(nama)')
-      .order('id', { ascending: true });
-
-    if (bilikData) {
-      setSemuaBilik(bilikData);
-      if (ustazSemasa) {
-        const sayaPunya = bilikData.find(b => String(b.perawat_semasa_id) === String(ustazSemasa.id));
-        setBilikAktif(sayaPunya || null);
-      }
-    }
-  };
-
+  // 1. Muat Senarai Perawat
   useEffect(() => {
-    inisialisasi();
+    const ambilSenaraiPerawat = async () => {
+      const { data } = await supabase
+        .from('perawat')
+        .select('*')
+        .eq('status_aktif', true)
+        .order('nama', { ascending: true });
+
+      if (data && data.length > 0) {
+        setSenaraiPerawat(data);
+        const simpananId = localStorage.getItem('syifalink_perawat_id');
+        const padanan = data.find((p) => p.id === simpananId);
+        setUstazSemasa(padanan || data[0]);
+      }
+    };
+    ambilSenaraiPerawat();
   }, []);
 
+  // 2. Tetapkan Sesi Mengikut Waktu Semasa
   useEffect(() => {
-    if (ustazSemasa) {
-      muatDataBilik();
-      muatSemulaGiliran();
+    const jam = new Date().getHours();
+    if (jam >= 15) {
+      setSesiDipilih('Sesi Malam');
+    } else {
+      setSesiDipilih('Sesi Pagi');
     }
-  }, [ustazSemasa]);
+  }, []);
 
-  useEffect(() => {
-    const saluran = supabase
-      .channel('bilik_realtime_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bilik_rawatan' }, () => {
-        muatDataBilik();
-      })
-      .subscribe();
+  // 3. Muat Data Bilik Rawatan
+  const muatDataBilik = async () => {
+    try {
+      const { data: bilik } = await supabase
+        .from('bilik_rawatan')
+        .select('*, perawat(nama)')
+        .order('id', { ascending: true });
 
-    return () => {
-      supabase.removeChannel(saluran);
-    };
-  }, [ustazSemasa]);
+      if (bilik) {
+        setSenaraiBilik(bilik);
+        if (ustazSemasa) {
+          const bilikUstaz = bilik.find(
+            (b) => b.perawat_semasa_id && String(b.perawat_semasa_id) === String(ustazSemasa.id)
+          );
+          setBilikSemasa(bilikUstaz || null);
+          if (bilikUstaz) {
+            setBilikPilihanId(bilikUstaz.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Ralat muat bilik:', err);
+    }
+  };
 
-  // 3. Semak Giliran Pesakit
+  // 4. Muat Reaksi Ruqyah Dinamik dari Pangkalan Data
+  const muatSenaraiReaksi = async () => {
+    try {
+      const { data } = await supabase
+        .from('reaksi_ruqyah')
+        .select('nama_reaksi')
+        .eq('status_aktif', true)
+        .order('turutan', { ascending: true })
+        .order('nama_reaksi', { ascending: true });
+
+      if (data && data.length > 0) {
+        setSenaraiReaksiDB(data.map((d) => d.nama_reaksi));
+      } else {
+        setSenaraiReaksiDB(DEFAULT_REAKSI);
+      }
+    } catch (err) {
+      setSenaraiReaksiDB(DEFAULT_REAKSI);
+    }
+  };
+
+  // 5. Muat Senarai Giliran Menunggu & Pesakit Aktif
   const muatSemulaGiliran = async () => {
     if (!ustazSemasa) return;
 
-    const { data: aktif } = await supabase
-      .from('giliran')
-      .select('*, pesakit(*)')
-      .eq('perawat_id', ustazSemasa.id)
-      .eq('status', 'sedang_rawat')
-      .maybeSingle();
+    try {
+      // Ambil pesakit aktif ustaz ini (status dipanggil atau sedang merawat)
+      const { data: senaraiAktif } = await supabase
+        .from('giliran')
+        .select('*, pesakit(id, nama, no_ic, no_telefon, alamat)')
+        .eq('perawat_id', ustazSemasa.id)
+        .in('status', ['dipanggil', 'sedang_rawat', 'rawatan']);
 
-    setGiliranAktif(aktif || null);
+      if (senaraiAktif && senaraiAktif.length > 0) {
+        const tersusun = [...senaraiAktif].sort((a, b) => {
+          const masaA = new Date(a.waktu_panggil || a.updated_at || a.created_at || 0).getTime();
+          const masaB = new Date(b.waktu_panggil || b.updated_at || b.created_at || 0).getTime();
+          return masaB - masaA;
+        });
+        setPesakitAktif(tersusun[0]);
+      } else {
+        setPesakitAktif(null);
+      }
 
-    const { count } = await supabase
-      .from('giliran')
-      .select('*', { count: 'exact', head: true })
-      .or(`perawat_id.is.null,perawat_id.eq.${ustazSemasa.id}`)
-      .eq('status', 'menunggu');
+      // Ambil senarai perawat yang sedang check-in di bilik
+      const { data: bilikAktif } = await supabase
+        .from('bilik_rawatan')
+        .select('perawat_semasa_id')
+        .not('perawat_semasa_id', 'is', null);
 
-    setBilanganMenunggu(count || 0);
+      const idPerawatBertugas = bilikAktif
+        ?.map((b) => b.perawat_semasa_id)
+        .filter(Boolean) as string[];
+
+      // Ambil semua pesakit berstatus menunggu
+      const { data: semuaMenunggu } = await supabase
+        .from('giliran')
+        .select('*, pesakit(id, nama, no_ic, no_telefon, alamat)')
+        .eq('status', 'menunggu')
+        .order('created_at', { ascending: true });
+
+      if (semuaMenunggu) {
+        const pesakitBolehDipanggil = semuaMenunggu.filter((g) => {
+          if (!g.perawat_id) return true;
+          if (String(g.perawat_id) === String(ustazSemasa.id)) return true;
+          const perawatMasihAdaBilik = idPerawatBertugas.some(
+            (id) => String(id) === String(g.perawat_id)
+          );
+          return !perawatMasihAdaBilik;
+        });
+
+        setSenaraiMenunggu(pesakitBolehDipanggil);
+      }
+    } catch (err) {
+      console.warn('Ralat muat giliran:', err);
+    }
   };
 
-  // 4. Tindakan: CHECK-IN BILIK
-  const tanganiCheckIn = async () => {
-    if (!bilikPilihanId || !ustazSemasa) return;
-    setMemproses(true);
+  // 6. Muat Senarai Ubat Penawar
+  const muatDataUbat = async () => {
+    try {
+      const { data } = await supabase
+        .from('bahan_penawar')
+        .select('*')
+        .gt('stok_semasa', 0)
+        .order('nama_item', { ascending: true });
 
+      if (data) setSenaraiBahan(data);
+    } catch (err) {}
+  };
+
+  useEffect(() => {
+    if (ustazSemasa) {
+      localStorage.setItem('syifalink_perawat_id', ustazSemasa.id);
+      muatDataBilik();
+      muatSemulaGiliran();
+      muatDataUbat();
+      muatSenaraiReaksi();
+    }
+  }, [ustazSemasa]);
+
+  // 7. Langganan Masa Nyata
+  useEffect(() => {
+    const pemasa = setInterval(() => {
+      muatDataBilik();
+      muatSemulaGiliran();
+    }, 2500);
+
+    const saluran = supabase
+      .channel('konsol_perawat_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'giliran' }, () => muatSemulaGiliran())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bilik_rawatan' }, () => muatDataBilik())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reaksi_ruqyah' }, () => muatSenaraiReaksi())
+      .subscribe();
+
+    return () => {
+      clearInterval(pemasa);
+      supabase.removeChannel(saluran);
+    };
+  }, [ustazSemasa, bilikSemasa]);
+
+  // 8. Fungsi Check-In Bilik Rawatan
+  const daftarMasukBilik = async () => {
+    if (!ustazSemasa || !bilikPilihanId) {
+      alert('Sila pilih bilik rawatan yang tersedia terlebih dahulu.');
+      return;
+    }
+
+    setMemproses(true);
     try {
       await supabase
         .from('bilik_rawatan')
-        .update({
-          perawat_semasa_id: null,
-          sesi: null,
-          status: 'kosong',
-          waktu_check_in: null
+        .update({ 
+          perawat_semasa_id: null, 
+          sesi: null, 
+          waktu_check_in: null 
         })
         .eq('perawat_semasa_id', ustazSemasa.id);
+
+      const formatSesiDB = sesiDipilih === 'Sesi Malam' || sesiDipilih === 'malam' ? 'malam' : 'pagi';
 
       const { error } = await supabase
         .from('bilik_rawatan')
         .update({
           perawat_semasa_id: ustazSemasa.id,
-          sesi: sesiPilihan,
-          status: 'aktif',
+          sesi: formatSesiDB,
           waktu_check_in: new Date().toISOString()
         })
         .eq('id', bilikPilihanId);
@@ -191,394 +325,373 @@ export default function KonsolPerawat() {
       if (error) throw error;
 
       await muatDataBilik();
-      paparNotifikasi('Berjaya check-in ke bilik! Sistem TV dan giliran kini aktif.');
+      await muatSemulaGiliran();
     } catch (err: any) {
-      paparNotifikasi('Ralat semasa check-in: ' + err.message, 'ralat');
+      alert('Gagal daftar masuk bilik: ' + err.message);
     } finally {
       setMemproses(false);
     }
   };
 
-  // 5. Tindakan: CHECK-OUT BILIK
-  const tanganiCheckOut = async () => {
-    if (!bilikAktif && !ustazSemasa) return;
+  // 9. Tamat Syif
+  const tamatSyifLepasBilik = async () => {
+    if (!bilikSemasa) return;
+    if (pesakitAktif) {
+      alert('Sila selesaikan atau langkau pesakit semasa sebelum melepaskan bilik.');
+      return;
+    }
+
+    const sah = window.confirm(`Adakah anda pasti mahu tamat syif dan melepaskan ${bilikSemasa.nama_bilik}?`);
+    if (!sah) return;
+
     setMemproses(true);
-
     try {
-      const idBilikLepas = bilikAktif?.id;
-
-      let query = supabase
+      await supabase
         .from('bilik_rawatan')
         .update({
           perawat_semasa_id: null,
-          sesi: null,
           status: 'kosong',
+          sesi: null,
           waktu_check_in: null
-        });
+        })
+        .eq('id', bilikSemasa.id);
 
-      if (idBilikLepas && ustazSemasa) {
-        query = query.or(`id.eq.${idBilikLepas},perawat_semasa_id.eq.${ustazSemasa.id}`);
-      } else if (idBilikLepas) {
-        query = query.eq('id', idBilikLepas);
-      } else if (ustazSemasa) {
-        query = query.eq('perawat_semasa_id', ustazSemasa.id);
-      }
-
-      const { error } = await query;
-      if (error) throw error;
-
-      setBilikAktif(null);
+      setBilikSemasa(null);
       setBilikPilihanId(null);
       await muatDataBilik();
-      paparNotifikasi('Bilik berjaya dilepaskan. Sedia untuk perawat seterusnya.');
+      await muatSemulaGiliran();
     } catch (err: any) {
-      paparNotifikasi('Ralat semasa check-out: ' + err.message, 'ralat');
+      alert('Ralat melepaskan bilik: ' + err.message);
     } finally {
       setMemproses(false);
     }
   };
 
-  // 6. Panggil Pesakit Seterusnya
+  // 10. Panggil Pesakit Seterusnya (Status Awal: 'dipanggil')
   const panggilPesakitSeterusnya = async () => {
-    if (!ustazSemasa || !bilikAktif) {
-      paparNotifikasi('Sila check-in ke bilik rawatan terlebih dahulu sebelum memanggil pesakit.', 'ralat');
+    if (!ustazSemasa || !bilikSemasa) {
+      alert('Sila daftar masuk bilik rawatan terlebih dahulu.');
+      return;
+    }
+
+    if (senaraiMenunggu.length === 0) {
+      alert('Tiada pesakit dalam senarai menunggu.');
       return;
     }
 
     setMemproses(true);
     try {
-      const { data: giliranSeterusnya, error: errCari } = await supabase
+      // Selesaikan sebarang rekod lama yang tergantung jika ada
+      await supabase
         .from('giliran')
-        .select('id, no_giliran')
-        .or(`perawat_id.is.null,perawat_id.eq.${ustazSemasa.id}`)
-        .eq('status', 'menunggu')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .update({ status: 'selesai' })
+        .eq('perawat_id', ustazSemasa.id)
+        .in('status', ['dipanggil', 'sedang_rawat', 'rawatan']);
 
-      if (errCari) throw errCari;
+      const pesakitSasaran = senaraiMenunggu[0];
 
-      if (!giliranSeterusnya) {
-        paparNotifikasi('Tiada pesakit lagi dalam barisan menunggu.', 'ralat');
-        return;
-      }
-
-      const masaKini = new Date().toISOString();
-      const { error: errUpdate } = await supabase
-        .from('giliran')
-        .update({ 
-          perawat_id: ustazSemasa.id,
-          status: 'sedang_rawat',
-          waktu_panggil: masaKini
-        })
-        .eq('id', giliranSeterusnya.id);
-
-      if (errUpdate) throw errUpdate;
-
-      paparNotifikasi(`Nombor ${giliranSeterusnya.no_giliran} sedang dipanggil di skrin TV!`);
-      await muatSemulaGiliran();
-    } catch (err: any) {
-      paparNotifikasi('Ralat memanggil pesakit: ' + err.message, 'ralat');
-    } finally {
-      setMemproses(false);
-    }
-  };
-
-  // 7. PANGGIL SEMULA PESAKIT (RECALL KE TV - TANPA ALERT SEKATAN)
-  const panggilSemula = async () => {
-    if (!giliranAktif) return;
-    setMemproses(true);
-
-    try {
-      const masaKini = new Date().toISOString();
-
-      // Kemas kini waktu_panggil untuk memicu audio TV
       const { error } = await supabase
         .from('giliran')
         .update({
-          status: 'sedang_rawat',
-          waktu_panggil: masaKini
+          status: 'dipanggil',
+          perawat_id: ustazSemasa.id,
+          waktu_panggil: new Date().toISOString()
         })
-        .eq('id', giliranAktif.id);
+        .eq('id', pesakitSasaran.id);
 
       if (error) {
-        // Sandaran jika lajur waktu_panggil tiada
         await supabase
           .from('giliran')
-          .update({ status: 'sedang_rawat' })
-          .eq('id', giliranAktif.id);
+          .update({
+            status: 'dipanggil',
+            perawat_id: ustazSemasa.id
+          })
+          .eq('id', pesakitSasaran.id);
       }
 
-      paparNotifikasi(`Panggilan semula nombor ${giliranAktif.no_giliran} telah dihantar ke skrin TV!`);
+      setPesakitAktif({
+        ...pesakitSasaran,
+        status: 'dipanggil',
+        perawat_id: ustazSemasa.id
+      });
+
+      // Reset borang rawatan
+      setReaksiDipilih([]);
+      setUbatDipilih([]);
+      setCatatanRawatan('');
+      setPerluMC(false);
+      setBilanganHariMC(1);
+      setBukaInputTambahan(false);
+      setInputTeksTambahan('');
+
+      await muatSemulaGiliran();
     } catch (err: any) {
-      paparNotifikasi('Ralat panggil semula: ' + err.message, 'ralat');
+      alert('Ralat memanggil pesakit: ' + err.message);
     } finally {
       setMemproses(false);
     }
   };
 
-  // 8. LANGKAU PESAKIT (QUEUE BALIK - SATU KLIK TERUS BERFUNGSI)
-  const langkauPesakit = async () => {
-    if (!giliranAktif) return;
-    setMemproses(true);
+  // 11. Tukar Status ke "Sedang Merawat" (Berasaskan Butang atau Tindakan Pintar)
+  const mulakanRawatan = async () => {
+    if (!pesakitAktif || pesakitAktif.status === 'sedang_rawat') return;
 
     try {
-      const idPesakitLangkau = giliranAktif.id;
-      const noGiliranLangkau = giliranAktif.no_giliran;
-      const masaSekarang = new Date().toISOString();
+      await supabase
+        .from('giliran')
+        .update({ status: 'sedang_rawat' })
+        .eq('id', pesakitAktif.id);
 
-      // Kemas kini status ke 'menunggu', lepaskan bilik perawat, dan letakkan di hujung barisan
-      const { error } = await supabase
+      setPesakitAktif((prev) => (prev ? { ...prev, status: 'sedang_rawat' } : null));
+    } catch (err) {
+      console.warn('Ralat mengemas kini status rawatan:', err);
+    }
+  };
+
+  const panggilSemulaPesakit = async () => {
+    if (!pesakitAktif) return;
+    setMemproses(true);
+    try {
+      await supabase
+        .from('giliran')
+        .update({ waktu_panggil: new Date().toISOString() })
+        .eq('id', pesakitAktif.id);
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  const langkauPesakit = async () => {
+    if (!pesakitAktif) return;
+    const sah = window.confirm(`Kembalikan nombor giliran ${pesakitAktif.no_giliran} ke senarai menunggu?`);
+    if (!sah) return;
+
+    setMemproses(true);
+    try {
+      await supabase
         .from('giliran')
         .update({
           status: 'menunggu',
           perawat_id: null,
-          waktu_panggil: null,
-          created_at: masaSekarang
+          waktu_panggil: null
         })
-        .eq('id', idPesakitLangkau);
+        .eq('id', pesakitAktif.id);
 
-      if (error) {
-        // Sandaran sekiranya pangkalan data tidak membenarkan ubah created_at
-        await supabase
-          .from('giliran')
-          .update({
-            status: 'menunggu',
-            perawat_id: null,
-            waktu_panggil: null
-          })
-          .eq('id', idPesakitLangkau);
-      }
-
-      // Kosongkan kad pesakit semasa di konsol perawat
+      setPesakitAktif(null);
       setReaksiDipilih([]);
-      setPenawarDipilih({});
-      setItemTambahan('');
-      setHargaTambahan('');
-      setPerluMC(false);
-      setTempohMC(1);
-      setSebabMC(SEBAB_MC_PRESET[0]);
-      setGiliranAktif(null);
-
+      setUbatDipilih([]);
+      setCatatanRawatan('');
+      setBukaInputTambahan(false);
+      setInputTeksTambahan('');
       await muatSemulaGiliran();
-      paparNotifikasi(`Nombor ${noGiliranLangkau} telah dilangkau dan dimasukkan semula ke barisan menunggu.`);
     } catch (err: any) {
-      paparNotifikasi('Ralat melangkau pesakit: ' + err.message, 'ralat');
+      alert('Ralat melangkau pesakit: ' + err.message);
     } finally {
       setMemproses(false);
     }
   };
 
-  const toggleReaksi = (nama: string) => {
-    setReaksiDipilih(prev => prev.includes(nama) ? prev.filter(r => r !== nama) : [...prev, nama]);
+  // 12. Pengendalian Reaksi Ruqyah & Pemicu Auto-Rawatan
+  const toggleReaksi = (reaksi: string) => {
+    // Tukar status secara automatik ke 'sedang_rawat' jika masih 'dipanggil'
+    if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
+      mulakanRawatan();
+    }
+
+    setReaksiDipilih((prev) =>
+      prev.includes(reaksi) ? prev.filter((r) => r !== reaksi) : [...prev, reaksi]
+    );
   };
 
-  const togglePenawar = (item: ItemPenawar) => {
-    setPenawarDipilih(prev => {
-      const copy = { ...prev };
-      if (copy[item.id]) delete copy[item.id];
-      else copy[item.id] = 1;
-      return copy;
+  const tambahReaksiKustom = () => {
+    const teksBersih = inputTeksTambahan.trim();
+    if (!teksBersih) return;
+
+    if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
+      mulakanRawatan();
+    }
+
+    if (!reaksiDipilih.includes(teksBersih)) {
+      setReaksiDipilih((prev) => [...prev, teksBersih]);
+    }
+
+    if (!senaraiReaksiDB.includes(teksBersih)) {
+      setSenaraiReaksiDB((prev) => [...prev, teksBersih]);
+    }
+
+    setInputTeksTambahan('');
+    setBukaInputTambahan(false);
+  };
+
+  // 13. Pengurusan Ubat Dipilih & Pemicu Auto-Rawatan
+  const tambahItemUbat = (bahan: BahanPenawar) => {
+    if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
+      mulakanRawatan();
+    }
+
+    setUbatDipilih((prev) => {
+      const wujud = prev.find((item) => item.id === bahan.id);
+      if (wujud) {
+        return prev.map((item) =>
+          item.id === bahan.id ? { ...item, kuantiti: item.kuantiti + 1 } : item
+        );
+      }
+      return [...prev, { id: bahan.id, nama_item: bahan.nama_item, harga: bahan.harga, kuantiti: 1 }];
     });
   };
 
-  const jumlahPenawarPiawai = Object.entries(penawarDipilih).reduce((total, [itemId, qty]) => {
-    const item = senaraiPenawarDB.find(p => p.id === itemId);
-    return total + (item ? item.harga * qty : 0);
-  }, 0);
-  const nilaiHargaTambahan = parseFloat(hargaTambahan) || 0;
-  const jumlahKeseluruhan = jumlahPenawarPiawai + nilaiHargaTambahan;
+  const tolakItemUbat = (id: string) => {
+    setUbatDipilih((prev) =>
+      prev
+        .map((item) => (item.id === id ? { ...item, kuantiti: item.kuantiti - 1 } : item))
+        .filter((item) => item.kuantiti > 0)
+    );
+  };
 
-  // 9. Hantar Rawatan & Data Sijil MC ke Farmasi
-  const hantarLaporanKeFarmasi = async () => {
-    if (!giliranAktif || !ustazSemasa) return;
+  // 14. Hantar Pesakit ke Farmasi & Kaunter Bayaran
+  const hantarKeFarmasi = async () => {
+    if (!pesakitAktif || !ustazSemasa) return;
+
     setMemproses(true);
-
     try {
-      const { data: sesi, error: errSesi } = await supabase
-        .from('sesi_rawatan')
-        .insert({
-          giliran_id: giliranAktif.id,
-          pesakit_id: giliranAktif.pesakit_id,
+      // 1. Simpan rekod sesi rawatan (Kalis schema database)
+      const dataSesi: any = {
+        pesakit_id: pesakitAktif.pesakit_id,
+        perawat_id: ustazSemasa.id,
+        reaksi_rawatan: reaksiDipilih,
+        dapatan_gangguan: reaksiDipilih.join(', ') || 'Rawatan Ruqyah Am',
+        catatan_rawatan: catatanRawatan.trim() || null,
+        senarai_ubat: ubatDipilih,
+        diberi_mc: perluMC,
+        tempoh_mc_hari: perluMC ? bilanganHariMC : 0
+      };
+
+      const { error: errSesi } = await supabase.from('sesi_rawatan').insert(dataSesi);
+
+      if (errSesi) {
+        // Sandaran jika terdapat kolum catatan_rawatan yang belum wujud
+        await supabase.from('sesi_rawatan').insert({
+          pesakit_id: pesakitAktif.pesakit_id,
           perawat_id: ustazSemasa.id,
-          reaksi_rawatan: reaksiDipilih,
-          dapatan_gangguan: reaksiDipilih.length > 0 ? reaksiDipilih.join(', ') : 'Selesai Ruqyah Syar’iyyah',
-          item_tambahan: itemTambahan.trim() || null,
-          harga_tambahan: nilaiHargaTambahan,
-          perlu_mc: perluMC,
-          tempoh_mc_hari: perluMC ? tempohMC : 0,
-          sebab_mc: perluMC ? sebabMC : null
-        })
-        .select()
-        .single();
-
-      if (errSesi) throw errSesi;
-
-      const senaraiItemFormat: any[] = Object.entries(penawarDipilih).map(([itemId, qty]) => {
-        const item = senaraiPenawarDB.find(p => p.id === itemId);
-        return {
-          item_id: itemId,
-          nama: item?.nama_item || 'Bahan Ruqyah',
-          kuantiti: qty,
-          harga_seunit: item?.harga || 0
-        };
-      });
-
-      if (itemTambahan.trim()) {
-        senaraiItemFormat.push({
-          item_id: 'custom_item',
-          nama: `${itemTambahan.trim()} (Khas)`,
-          kuantiti: 1,
-          harga_seunit: nilaiHargaTambahan
+          dapatan_gangguan: reaksiDipilih.join(', ') || 'Rawatan Ruqyah Am'
         });
       }
 
-      if (perluMC) {
-        senaraiItemFormat.push({
-          item_id: 'sijil_mc',
-          nama: `Sijil Perakuan Cuti Sakit (${tempohMC} Hari)`,
-          kuantiti: 1,
-          harga_seunit: 0.00
-        });
-      }
-
-      await supabase.from('pesanan_ubat').insert({
-        sesi_rawatan_id: sesi.id,
-        pesakit_id: giliranAktif.pesakit_id,
-        senarai_item: senaraiItemFormat,
-        jumlah_bayaran: jumlahKeseluruhan,
-        status_bungkusan: 'perlu_bungkus',
-        status_bayaran: 'belum_bayar'
-      });
-
-      await supabase
+      // 2. Kemas kini status giliran ke farmasi (tanpa medan updated_at jika tiada kolum tersebut)
+      const { error: errGiliran } = await supabase
         .from('giliran')
-        .update({ status: 'ke_farmasi', waktu_selesai: new Date().toISOString() })
-        .eq('id', giliranAktif.id);
+        .update({
+          status: 'farmasi'
+        })
+        .eq('id', pesakitAktif.id);
 
+      if (errGiliran) throw errGiliran;
+
+      alert(`Pesakit ${pesakitAktif.no_giliran} berjaya dihantar ke Kaunter Bayaran & Farmasi.`);
+
+      setPesakitAktif(null);
       setReaksiDipilih([]);
-      setPenawarDipilih({});
-      setItemTambahan('');
-      setHargaTambahan('');
+      setUbatDipilih([]);
+      setCatatanRawatan('');
       setPerluMC(false);
-      setTempohMC(1);
-      setSebabMC(SEBAB_MC_PRESET[0]);
-      setGiliranAktif(null);
-      await muatSemulaGiliran();
+      setBilanganHariMC(1);
+      setBukaInputTambahan(false);
+      setInputTeksTambahan('');
 
-      paparNotifikasi('Laporan rawatan berjaya dihantar ke Kaunter Farmasi!');
+      await muatSemulaGiliran();
     } catch (err: any) {
-      paparNotifikasi('Ralat: ' + err.message, 'ralat');
+      alert('Ralat memproses rawatan: ' + err.message);
     } finally {
       setMemproses(false);
     }
   };
 
+  const jumlahBayaranUbat = ubatDipilih.reduce((acc, u) => acc + u.harga * u.kuantiti, 0);
+
   return (
     <div className={styles.container}>
-      <div className={styles.mobileWrapper}>
-        <div style={{ marginBottom: '0.75rem' }}>
-          <Link href="/" style={{ color: '#64748b', fontSize: '0.8rem', textDecoration: 'none' }}>
-            ← Menu Utama
-          </Link>
+      <div className={styles.topNav}>
+        <Link href="/" className={styles.backLink}>
+          ← Menu Utama
+        </Link>
+      </div>
+
+      <header className={styles.header}>
+        <div>
+          <h1 className={styles.title}>Konsol Perawat</h1>
+          <p className={styles.waitingCountText}>
+            Menunggu: <strong>{senaraiMenunggu.length} orang</strong>
+          </p>
         </div>
 
-        {/* Banner Notifikasi Terapung (Maklum Balas Visual Bebas Ralat Pelayar) */}
-        {notifikasiMesej && (
-          <div style={{
-            backgroundColor: notifikasiMesej.jenis === 'sukses' ? '#065f46' : '#7f1d1d',
-            border: `1px solid ${notifikasiMesej.jenis === 'sukses' ? '#10b981' : '#ef4444'}`,
-            borderRadius: '0.5rem',
-            padding: '0.75rem 1rem',
-            color: '#ffffff',
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginBottom: '0.85rem',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-          }}>
-            {notifikasiMesej.jenis === 'sukses' ? <CheckCircle2 size={18} color="#34d399" /> : <AlertCircle size={18} color="#f87171" />}
-            <span>{notifikasiMesej.teks}</span>
-          </div>
-        )}
-
-        {/* Profil Ustaz Bertugas */}
-        <header className={styles.header}>
-          <div>
-            <h1 className={styles.title}>Konsol Perawat</h1>
-            <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>
-              Menunggu: <strong style={{ color: '#38bdf8' }}>{bilanganMenunggu} orang</strong>
-            </p>
-          </div>
+        <div>
           <select
-            className={styles.selectUstaz}
+            className={styles.doctorSelect}
             value={ustazSemasa?.id || ''}
             onChange={(e) => {
-              const u = senaraiPerawat.find(item => item.id === e.target.value);
-              if (u) setUstazSemasa(u);
+              const dipilih = senaraiPerawat.find((p) => p.id === e.target.value);
+              if (dipilih) setUstazSemasa(dipilih);
             }}
           >
-            {senaraiPerawat.map((u) => (
-              <option key={u.id} value={u.id}>{u.nama}</option>
+            {senaraiPerawat.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nama}
+              </option>
             ))}
           </select>
-        </header>
+        </div>
+      </header>
 
-        {/* MODUL CHECK-IN / CHECK-OUT */}
-        {bilikAktif ? (
-          <div className={styles.activeRoomBanner}>
-            <div className={styles.roomInfoActive}>
-              <span>Sedang Bertugas di:</span><br />
-              <strong>{bilikAktif.nama_bilik}</strong> ({bilikAktif.sesi === 'pagi' ? 'Sesi Pagi' : 'Sesi Malam'})
-            </div>
-            <button type="button" onClick={tanganiCheckOut} disabled={memproses} className={styles.btnCheckOut}>
-              <LogOut size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
-              Tamat Syif / Lepas Bilik
-            </button>
-          </div>
-        ) : (
+      <main className={styles.mainContent}>
+        {/* KEADAAN 1: BELUM CHECK-IN */}
+        {!bilikSemasa ? (
           <div className={styles.checkInCard}>
-            <DoorOpen size={36} color="#38bdf8" style={{ marginBottom: '0.5rem' }} />
-            <h2 className={styles.checkInTitle}>Check-In Bilik Rawatan</h2>
-            <p className={styles.checkInSub}>Sila pilih sesi dan bilik fizikal yang anda gunakan hari ini:</p>
+            <div className={styles.checkInIconWrapper}>
+              <DoorOpen size={44} color="#38bdf8" />
+            </div>
 
-            <div className={styles.sessionSelector}>
+            <h2 className={styles.checkInTitle}>Check-In Bilik Rawatan</h2>
+            <p className={styles.checkInSubtitle}>
+              Sila pilih sesi dan bilik fizikal yang anda gunakan hari ini:
+            </p>
+
+            <div className={styles.sessionToggleRow}>
               <button
                 type="button"
-                onClick={() => setSesiPilihan('pagi')}
-                className={`${styles.sessionBtn} ${sesiPilihan === 'pagi' ? styles.sessionBtnActive : ''}`}
+                className={`${styles.sessionBtn} ${sesiDipilih === 'Sesi Pagi' ? styles.sessionBtnActive : ''}`}
+                onClick={() => setSesiDipilih('Sesi Pagi')}
               >
                 Sesi Pagi (08:30 AM - 01:30 PM)
               </button>
               <button
                 type="button"
-                onClick={() => setSesiPilihan('malam')}
-                className={`${styles.sessionBtn} ${sesiPilihan === 'malam' ? styles.sessionBtnActive : ''}`}
+                className={`${styles.sessionBtn} ${sesiDipilih === 'Sesi Malam' ? styles.sessionBtnActive : ''}`}
+                onClick={() => setSesiDipilih('Sesi Malam')}
               >
                 Sesi Malam (08:00 PM - 11:00 PM)
               </button>
             </div>
 
-            <div className={styles.roomGridSelect}>
-              {semuaBilik.map((b) => {
-                const sedangDipakaiOrangLain = Boolean(b.perawat_semasa_id && String(b.perawat_semasa_id) !== String(ustazSemasa?.id));
-                const dipilihSaya = bilikPilihanId === b.id;
+            <div className={styles.roomSelectGrid}>
+              {senaraiBilik.map((b) => {
+                const digunakan = Boolean(b.perawat_semasa_id);
+                const dipilih = bilikPilihanId === b.id;
 
                 return (
-                  <button
+                  <div
                     key={b.id}
-                    type="button"
-                    disabled={sedangDipakaiOrangLain}
-                    onClick={() => setBilikPilihanId(b.id)}
-                    className={`${styles.roomSelectBtn} ${dipilihSaya ? styles.roomSelectBtnSelected : ''} ${sedangDipakaiOrangLain ? styles.roomSelectBtnOccupied : ''}`}
+                    className={`${styles.roomSelectItem} ${dipilih ? styles.roomItemActive : ''} ${
+                      digunakan ? styles.roomItemDisabled : ''
+                    }`}
+                    onClick={() => {
+                      if (!digunakan) setBilikPilihanId(b.id);
+                    }}
                   >
-                    <span>{b.nama_bilik}</span>
-                    <span className={`${styles.roomStatusPill} ${sedangDipakaiOrangLain ? styles.pillOccupied : styles.pillKosong}`}>
-                      {sedangDipakaiOrangLain ? `Digunakan: ${b.perawat?.nama || 'Ustaz Lain'}` : 'Tersedia'}
+                    <span className={styles.roomSelectName}>{b.nama_bilik}</span>
+                    <span className={digunakan ? styles.badgeUsed : styles.badgeAvailable}>
+                      {digunakan ? `Digunakan: ${b.perawat?.nama || 'Perawat Lain'}` : 'Tersedia'}
                     </span>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -586,204 +699,376 @@ export default function KonsolPerawat() {
             <button
               type="button"
               disabled={memproses || !bilikPilihanId}
-              onClick={tanganiCheckIn}
+              onClick={daftarMasukBilik}
               className={styles.btnCheckInSubmit}
             >
               Masuk Bilik & Mula Bertugas
             </button>
           </div>
-        )}
-
-        {/* Pesakit Semasa */}
-        {bilikAktif && (
+        ) : (
+          /* KEADAAN 2: SUDAH CHECK-IN */
           <>
-            {giliranAktif ? (
-              <div className={styles.currentPatientCard}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div className={styles.patientNumber}>{giliranAktif.no_giliran}</div>
-                  {Boolean(giliranAktif.perlu_kerusi_roda || giliranAktif.pesakit?.perlu_kerusi_roda) && (
-                    <span style={{
-                      backgroundColor: '#78350f',
-                      border: '1px solid #f59e0b',
-                      color: '#fef08a',
-                      padding: '0.25rem 0.6rem',
-                      borderRadius: '0.4rem',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem'
-                    }}>
-                      <Accessibility size={14} /> Berkerusi Roda
-                    </span>
-                  )}
-                </div>
-                <div className={styles.patientName}>{giliranAktif.pesakit?.nama}</div>
-                <p className={styles.patientSub}>No. IC: {giliranAktif.pesakit?.no_ic}</p>
-                {giliranAktif.pesakit?.alamat && (
-                  <p className={styles.patientSub} style={{ marginTop: '0.25rem', opacity: 0.9 }}>
-                    Alamat: {giliranAktif.pesakit?.alamat}
-                  </p>
-                )}
-
-                {/* Butang Panggil Semula & Butang Langkau */}
-                <div style={{ marginTop: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={panggilSemula}
-                    disabled={memproses}
-                    className={styles.btnCall}
-                    style={{
-                      padding: '0.65rem 0.5rem',
-                      fontSize: '0.85rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      justifyContent: 'center',
-                      backgroundColor: '#0284c7',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '0.5rem',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Bell size={16} /> Panggil Semula
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={langkauPesakit}
-                    disabled={memproses}
-                    className={styles.btnCall}
-                    style={{
-                      padding: '0.65rem 0.5rem',
-                      fontSize: '0.85rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      justifyContent: 'center',
-                      backgroundColor: '#d97706',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '0.5rem',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <RotateCcw size={16} /> Langkau (Queue Balik)
-                  </button>
-                </div>
+            <div className={styles.activeDutyBanner}>
+              <div>
+                <span className={styles.dutyLabel}>Sedang Bertugas di:</span>
+                <span className={styles.dutyRoomName}>
+                  {bilikSemasa.nama_bilik} ({bilikSemasa.sesi === 'malam' || bilikSemasa.sesi === 'Sesi Malam' ? 'Sesi Malam' : 'Sesi Pagi'})
+                </span>
               </div>
-            ) : (
-              <div className={styles.waitingEmpty}>
-                <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 0 0.5rem 0' }}>
-                  Tiada pesakit sedang dirawat di {bilikAktif.nama_bilik}.
+              <button
+                type="button"
+                disabled={memproses}
+                onClick={tamatSyifLepasBilik}
+                className={styles.btnEndShift}
+              >
+                <LogOut size={16} /> Tamat Syif / Lepas Bilik
+              </button>
+            </div>
+
+            {!pesakitAktif ? (
+              <div className={styles.emptyPatientCard}>
+                <p className={styles.emptyText}>
+                  Tiada pesakit sedang dirawat di {bilikSemasa.nama_bilik}.
                 </p>
                 <button
                   type="button"
+                  disabled={memproses || senaraiMenunggu.length === 0}
                   onClick={panggilPesakitSeterusnya}
-                  disabled={memproses || bilanganMenunggu === 0}
-                  className={styles.btnCall}
+                  className={styles.btnCallNext}
                 >
-                  <Bell size={18} /> Panggil Pesakit Seterusnya ({bilanganMenunggu})
+                  <Bell size={18} /> Panggil Pesakit Seterusnya ({senaraiMenunggu.length})
                 </button>
               </div>
-            )}
-
-            {/* Borang Diagnostik & Penawar */}
-            {giliranAktif && (
-              <div>
-                <div className={styles.sectionLabel}>1. Reaksi Semasa Ruqyah</div>
-                <div className={styles.gridReaksi}>
-                  {SENARAI_REAKSI.map((item) => {
-                    const aktif = reaksiDipilih.includes(item);
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => toggleReaksi(item)}
-                        className={`${styles.pillBtn} ${aktif ? styles.pillBtnActive : ''}`}
-                      >
-                        {item}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className={styles.sectionLabel}>2. Penawar / Ubat Diberikan</div>
-                <div className={styles.penawarList}>
-                  {senaraiPenawarDB.map((item) => {
-                    const dipilih = Boolean(penawarDipilih[item.id]);
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => togglePenawar(item)}
-                        className={`${styles.penawarItem} ${dipilih ? styles.penawarItemActive : ''}`}
-                      >
-                        <span className={styles.penawarTitle}>{item.nama_item}</span>
-                        <span className={styles.penawarPrice}>RM {item.harga.toFixed(2)}</span>
+            ) : (
+              <div className={styles.patientActiveContainer}>
+                {/* KAD PESAKIT AKTIF */}
+                <div className={styles.patientInfoCard}>
+                  <div className={styles.patientHeaderRow}>
+                    <div>
+                      <div className={styles.queuePill}>{pesakitAktif.no_giliran}</div>
+                      <h2 className={styles.patientNameTitle}>
+                        {pesakitAktif.pesakit?.nama || 'Pesakit Am'}
+                      </h2>
+                      <div className={styles.patientMetaRow}>
+                        <span>IC: {pesakitAktif.pesakit?.no_ic || '-'}</span>
+                        <span>Tel: {pesakitAktif.pesakit?.no_telefon || '-'}</span>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
 
-                <div className={styles.sectionLabel}><PlusCircle size={16} /> 3. Penawar / Keperluan Khas Tambahan</div>
-                <div className={styles.cardBox}>
-                  <div className={styles.inputGroup}>
-                    <input type="text" placeholder="Nama Penawar Khas" className={styles.textInput} value={itemTambahan} onChange={(e) => setItemTambahan(e.target.value)} />
-                    <input type="number" placeholder="RM (0.00)" className={styles.priceInput} value={hargaTambahan} onChange={(e) => setHargaTambahan(e.target.value)} />
+                    <div className={styles.patientActionButtons}>
+                      {/* BUTANG STATUS PINTAR: MULA RAWATAN / SEDANG MERAWAT */}
+                      {pesakitAktif.status === 'dipanggil' ? (
+                        <button
+                          type="button"
+                          onClick={mulakanRawatan}
+                          disabled={memproses}
+                          style={{
+                            backgroundColor: '#059669',
+                            border: 'none',
+                            color: '#ffffff',
+                            padding: '0.45rem 0.85rem',
+                            borderRadius: '0.5rem',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            boxShadow: '0 2px 6px rgba(5, 150, 105, 0.4)'
+                          }}
+                          title="Klik apabila pesakit telah masuk ke dalam bilik rawatan"
+                        >
+                          <Play size={14} fill="#ffffff" /> Mula Rawatan
+                        </button>
+                      ) : (
+                        <div style={{
+                          backgroundColor: 'rgba(5, 150, 105, 0.15)',
+                          border: '1px solid #10b981',
+                          color: '#34d399',
+                          padding: '0.45rem 0.75rem',
+                          borderRadius: '0.5rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem'
+                        }}>
+                          <span style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: '#10b981',
+                            display: 'inline-block',
+                            boxShadow: '0 0 8px #10b981'
+                          }}></span>
+                          Sedang Merawat
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={panggilSemulaPesakit}
+                        disabled={memproses}
+                        className={styles.btnRecall}
+                        title="Ulang panggilan audio di skrin TV dewan"
+                      >
+                        <Bell size={16} /> Panggil Semula
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={langkauPesakit}
+                        disabled={memproses}
+                        className={styles.btnSkip}
+                        title="Kembalikan pesakit ke barisan giliran menunggu"
+                      >
+                        <SkipForward size={16} /> Langkau (Queue Balik)
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className={styles.sectionLabel}><FileText size={16} /> 4. Perakuan Cuti Rehat Ruqyah (MC)</div>
-                <div className={styles.cardBox}>
-                  <label className={styles.toggleContainer}>
-                    <span className={styles.toggleLabel}>Keluarkan Sijil Cuti Rehat (MC)</span>
-                    <input type="checkbox" className={styles.checkbox} checked={perluMC} onChange={(e) => setPerluMC(e.target.checked)} />
-                  </label>
-                  {perluMC && (
-                    <div className={styles.mcOptions}>
-                      <div>
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tempoh Cuti:</span>
-                        <div className={styles.durationGrid} style={{ marginTop: '0.35rem' }}>
-                          {[1, 2, 3].map((hari) => (
-                            <button key={hari} type="button" onClick={() => setTempohMC(hari)} className={`${styles.durationPill} ${tempohMC === hari ? styles.durationPillActive : ''}`}>
-                              {hari} Hari
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Sebab Cuti:</span>
-                        <select className={styles.textInput} style={{ width: '100%', marginTop: '0.35rem' }} value={sebabMC} onChange={(e) => setSebabMC(e.target.value)}>
-                          {SEBAB_MC_PRESET.map((s, idx) => <option key={idx} value={s}>{s}</option>)}
-                        </select>
-                      </div>
+                {/* BORANG DIAGNOSTIK & RAWATAN */}
+                <div className={styles.diagnosticGrid}>
+                  {/* BAHAGIAN 1: REAKSI RUQYAH + BUTANG MAKLUMAT TAMBAHAN */}
+                  <div className={styles.diagCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+                      <h3 className={styles.sectionTitle} style={{ margin: 0 }}>
+                        <Sparkles size={18} color="#38bdf8" /> 1. Reaksi Semasa Ruqyah
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setBukaInputTambahan(!bukaInputTambahan)}
+                        style={{
+                          backgroundColor: bukaInputTambahan ? '#334155' : '#0284c7',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '0.45rem',
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        {bukaInputTambahan ? <X size={13} /> : <PlusCircle size={13} />}
+                        {bukaInputTambahan ? 'Batal' : '+ Maklumat Tambahan'}
+                      </button>
                     </div>
-                  )}
+
+                    {/* RUANGAN INPUT JIKA MAKLUMAT TAMBAHAN DIKLIK */}
+                    {bukaInputTambahan && (
+                      <div style={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        marginBottom: '0.9rem',
+                        padding: '0.65rem',
+                        backgroundColor: '#1e293b',
+                        borderRadius: '0.6rem',
+                        border: '1px solid #334155'
+                      }}>
+                        <input
+                          type="text"
+                          placeholder="Masukkan reaksi/simptom khusus yang tiada di tag..."
+                          value={inputTeksTambahan}
+                          onChange={(e) => setInputTeksTambahan(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              tambahReaksiKustom();
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            backgroundColor: '#0f172a',
+                            border: '1px solid #475569',
+                            color: '#ffffff',
+                            padding: '0.5rem 0.75rem',
+                            borderRadius: '0.4rem',
+                            fontSize: '0.82rem',
+                            outline: 'none'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={tambahReaksiKustom}
+                          style={{
+                            backgroundColor: '#059669',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '0.4rem',
+                            padding: '0.5rem 0.95rem',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Tambah
+                        </button>
+                      </div>
+                    )}
+
+                    {/* SENARAI TAG REAKSI RUQYAH GRID RESPONSIF */}
+                    <div className={styles.chipsContainer}>
+                      {senaraiReaksiDB.map((reaksi) => {
+                        const dipilih = reaksiDipilih.includes(reaksi);
+                        const isNormal = reaksi.toLowerCase().includes('tiada sebarang reaksi') || reaksi.toLowerCase().includes('normal');
+                        return (
+                          <button
+                            key={reaksi}
+                            type="button"
+                            className={`${styles.reaksiChip} ${dipilih ? styles.reaksiChipActive : ''} ${isNormal ? styles.reaksiChipFull : ''}`}
+                            onClick={() => toggleReaksi(reaksi)}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                              {dipilih && <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>✓</span>}
+                              {reaksi}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* BAHAGIAN 2: PENAWAR & UBAT */}
+                  <div className={styles.diagCard}>
+                    <h3 className={styles.sectionTitle}>
+                      <Pill size={18} color="#34d399" /> 2. Penawar / Ubat Diberikan
+                    </h3>
+
+                    <div className={styles.medicineList}>
+                      {senaraiBahan.map((bahan) => {
+                        const itemAda = ubatDipilih.find((u) => u.id === bahan.id);
+                        return (
+                          <div key={bahan.id} className={styles.medicineRow}>
+                            <div>
+                              <div className={styles.medName}>{bahan.nama_item}</div>
+                              <div className={styles.medPrice}>RM {Number(bahan.harga).toFixed(2)} / unit</div>
+                            </div>
+
+                            <div className={styles.medQtyControl}>
+                              {itemAda ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => tolakItemUbat(bahan.id)}
+                                    className={styles.btnQty}
+                                  >
+                                    <Minus size={14} />
+                                  </button>
+                                  <span className={styles.qtyNumber}>{itemAda.kuantiti}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => tambahItemUbat(bahan)}
+                                    className={styles.btnQty}
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => tambahItemUbat(bahan)}
+                                  className={styles.btnAddMed}
+                                >
+                                  + Tambah
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* BAHAGIAN 3: CATATAN RAWATAN */}
+                  <div className={styles.diagCard}>
+                    <h3 className={styles.sectionTitle}>
+                      <FileText size={18} color="#fbbf24" /> 3. Catatan Diagnostik & Amalan
+                    </h3>
+                    <textarea
+                      rows={3}
+                      className={styles.textareaField}
+                      placeholder="cth: Pesakit dinasihatkan membaca Surah Al-Baqarah dan amalkan mandi ais bidara selama 3 hari berturut-turut..."
+                      value={catatanRawatan}
+                      onFocus={() => {
+                        if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
+                          mulakanRawatan();
+                        }
+                      }}
+                      onChange={(e) => {
+                        if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
+                          mulakanRawatan();
+                        }
+                        setCatatanRawatan(e.target.value);
+                      }}
+                    />
+                  </div>
+
+                  {/* BAHAGIAN 4: SIJIL CUTI SAKIT (MC) */}
+                  <div className={styles.diagCard}>
+                    <h3 className={styles.sectionTitle}>
+                      <Calendar size={18} color="#a855f7" /> 4. Sijil Cuti Sakit (MC)
+                    </h3>
+                    <div className={styles.mcRow}>
+                      <label className={styles.checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={perluMC}
+                          onChange={(e) => {
+                            if (pesakitAktif && pesakitAktif.status === 'dipanggil') {
+                              mulakanRawatan();
+                            }
+                            setPerluMC(e.target.checked);
+                          }}
+                          className={styles.checkboxInput}
+                        />
+                        <span>Keluarkan Sijil Cuti Sakit (MC)</span>
+                      </label>
+
+                      {perluMC && (
+                        <div className={styles.mcDaysRow}>
+                          <span>Tempoh:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={7}
+                            value={bilanganHariMC}
+                            onChange={(e) => setBilanganHariMC(parseInt(e.target.value, 10) || 1)}
+                            className={styles.mcInput}
+                          />
+                          <span>Hari</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* BAR TERAPUNG PENGHANTARAN */}
+                <div className={styles.bottomBarSubmit}>
+                  <div>
+                    <span className={styles.summaryLabel}>Jumlah Penawar:</span>
+                    <span className={styles.summaryValue}>
+                      {ubatDipilih.reduce((a, b) => a + b.kuantiti, 0)} item (RM {jumlahBayaranUbat.toFixed(2)})
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={memproses}
+                    onClick={hantarKeFarmasi}
+                    className={styles.btnSubmitPharmacy}
+                  >
+                    <Send size={18} /> Hantar ke Kaunter Bayaran & Farmasi
+                  </button>
                 </div>
               </div>
             )}
           </>
         )}
-
-        {/* Floating Bar Bawah */}
-        {bilikAktif && giliranAktif && (
-          <div className={styles.bottomBar}>
-            <div className={styles.bottomBarContent}>
-              <div>
-                <span className={styles.totalLabel}>Jumlah Keseluruhan</span>
-                <span className={styles.totalAmount}>RM {jumlahKeseluruhan.toFixed(2)}</span>
-              </div>
-              <button type="button" onClick={hantarLaporanKeFarmasi} disabled={memproses} className={styles.btnSubmit}>
-                <Send size={18} />
-                <span>{memproses ? 'Menghantar...' : 'Selesai & Hantar'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      </main>
     </div>
   );
 }

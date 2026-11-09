@@ -1,381 +1,134 @@
+/* app/perawat/perawat.module.css */
+
 .container {
   min-height: 100vh;
   background-color: #0b1120;
-  color: #f8fafc;
+  color: #f1f5f9;
+  padding: 1.5rem 1rem;
   display: flex;
-  justify-content: center;
-  padding: 1rem;
+  flex-direction: column;
+  align-items: center;
   font-family: inherit;
 }
 
-.mobileWrapper {
+.topNav {
+  max-width: 780px;
   width: 100%;
-  max-width: 480px;
-  background-color: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 1.25rem;
-  padding: 1.25rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
-  padding-bottom: 7rem; /* Ruang lebih untuk butang terapung di bawah */
-  position: relative;
+  margin-bottom: 0.75rem;
+}
+
+.backLink {
+  color: #64748b;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.backLink:hover {
+  color: #38bdf8;
 }
 
 .header {
+  max-width: 780px;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #1e293b;
   margin-bottom: 1.25rem;
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.85rem;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .title {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.35rem;
+  font-weight: 800;
   color: #38bdf8;
   margin: 0;
 }
 
-.selectUstaz {
-  background-color: #1e293b;
-  color: #f8fafc;
-  border: 1px solid #334155;
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.85rem;
-  outline: none;
-}
-
-.currentPatientCard {
-  background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
-  border: 1px solid #059669;
-  border-radius: 1rem;
-  padding: 1.25rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.2);
-}
-
-.patientNumber {
-  font-size: 2rem;
-  font-weight: 900;
-  color: #34d399;
-  margin: 0 0 0.25rem 0;
-}
-
-.patientName {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #ffffff;
-  margin: 0 0 0.5rem 0;
-}
-
-.patientSub {
-  font-size: 0.8rem;
-  color: #a7f3d0;
-  margin: 0;
-}
-
-.waitingEmpty {
-  background-color: #1e293b;
-  border: 1px dashed #334155;
-  border-radius: 1rem;
-  padding: 2rem 1rem;
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-
-.btnCall {
-  width: 100%;
-  background-color: #0284c7;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 1rem;
-  border: none;
-  border-radius: 0.75rem;
-  padding: 0.9rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  transition: background-color 0.2s;
-  margin-top: 1rem;
-}
-
-.btnCall:hover {
-  background-color: #0369a1;
-}
-
-.sectionLabel {
-  font-size: 0.85rem;
-  font-weight: 700;
+.waitingCountText {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.82rem;
   color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
 }
 
-.gridReaksi {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.pillBtn {
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  color: #cbd5e1;
-  padding: 0.75rem 0.5rem;
-  border-radius: 0.75rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.15s ease-in-out;
-}
-
-.pillBtnActive {
-  background-color: #047857;
-  border-color: #34d399;
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
-}
-
-.penawarList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.penawarItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
-}
-
-.penawarItemActive {
-  background-color: #0f3747;
-  border-color: #38bdf8;
-}
-
-.penawarTitle {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #f8fafc;
-}
-
-.penawarPrice {
-  font-size: 0.8rem;
-  font-weight: 700;
+.waitingCountText strong {
   color: #38bdf8;
-  background-color: #0b1120;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.4rem;
 }
 
-/* --- Seksyen Item Tambahan & Sijil MC --- */
-.cardBox {
-  background-color: #162032;
-  border: 1px solid #334155;
-  border-radius: 0.85rem;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.inputGroup {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.textInput {
-  flex: 2;
-  background-color: #0b1120;
-  border: 1px solid #475569;
-  border-radius: 0.5rem;
-  padding: 0.65rem 0.75rem;
+.doctorSelect {
+  background-color: #1e293b;
   color: #ffffff;
-  font-size: 0.85rem;
-  outline: none;
-}
-
-.textInput:focus {
-  border-color: #38bdf8;
-}
-
-.priceInput {
-  flex: 1;
-  background-color: #0b1120;
-  border: 1px solid #475569;
+  border: 1px solid #334155;
+  padding: 0.55rem 0.9rem;
   border-radius: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  color: #34d399;
-  font-weight: 700;
-  font-size: 0.85rem;
-  outline: none;
-}
-
-.toggleContainer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-}
-
-.toggleLabel {
-  font-size: 0.9rem;
   font-weight: 600;
-  color: #f1f5f9;
-}
-
-.checkbox {
-  width: 1.2rem;
-  height: 1.2rem;
-  accent-color: #10b981;
+  font-size: 0.88rem;
+  outline: none;
   cursor: pointer;
 }
 
-.mcOptions {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px dashed #334155;
+.mainContent {
+  max-width: 780px;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1.25rem;
+  padding-bottom: 5rem;
 }
 
-.durationGrid {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.durationPill {
-  flex: 1;
-  background-color: #0b1120;
-  border: 1px solid #334155;
-  color: #cbd5e1;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: center;
-}
-
-.durationPillActive {
-  background-color: #0284c7;
-  border-color: #38bdf8;
-  color: #ffffff;
-}
-
-/* Floating Action Bar di Bawah */
-.bottomBar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: #0b1120;
-  border-top: 1px solid #1e293b;
-  padding: 1rem;
-  display: flex;
-  justify-content: center;
-  z-index: 40;
-}
-
-.bottomBarContent {
-  width: 100%;
-  max-width: 480px;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.totalLabel {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  display: block;
-}
-
-.totalAmount {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #34d399;
-}
-
-.btnSubmit {
-  flex: 1;
-  background-color: #10b981;
-  color: #022c22;
-  font-weight: 800;
-  font-size: 0.95rem;
-  border: none;
-  border-radius: 0.75rem;
-  padding: 0.85rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  transition: background-color 0.2s;
-}
-
-.btnSubmit:hover {
-  background-color: #059669;
-}
-
-.btnSubmit:disabled {
-  background-color: #334155;
-  color: #64748b;
-  cursor: not-allowed;
-}
-/* --- Modul Check-In / Check-Out Bilik Dinamik --- */
+/* KAD CHECK-IN */
 .checkInCard {
-  background-color: #1e293b;
-  border: 1px solid #334155;
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
   border-radius: 1rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  padding: 2.25rem 1.5rem;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.checkInIconWrapper {
+  background-color: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 1.1rem;
+  border-radius: 50%;
+  margin-bottom: 1rem;
 }
 
 .checkInTitle {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #38bdf8;
-  margin: 0 0 0.5rem 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin: 0 0 0.35rem 0;
 }
 
-.checkInSub {
-  font-size: 0.82rem;
+.checkInSubtitle {
+  font-size: 0.85rem;
   color: #94a3b8;
-  margin: 0 0 1.25rem 0;
+  margin: 0 0 1.5rem 0;
 }
 
-.sessionSelector {
+.sessionToggleRow {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 440px;
 }
 
 .sessionBtn {
   flex: 1;
-  background-color: #0b1120;
+  padding: 0.65rem 0.75rem;
+  background-color: #1e293b;
   border: 1px solid #334155;
-  color: #94a3b8;
-  padding: 0.6rem;
   border-radius: 0.5rem;
-  font-size: 0.8rem;
+  color: #94a3b8;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
@@ -387,112 +140,498 @@
   color: #ffffff;
 }
 
-.roomGridSelect {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 1.25rem;
+.roomSelectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
 }
 
-.roomSelectBtn {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #0b1120;
-  border: 1px solid #334155;
-  border-radius: 0.6rem;
-  padding: 0.85rem 1rem;
-  color: #f8fafc;
+.roomSelectItem {
+  background-color: #1e293b;
+  border: 1.5px solid #334155;
+  border-radius: 0.65rem;
+  padding: 0.85rem;
+  text-align: center;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
   transition: all 0.2s;
 }
 
-.roomSelectBtnSelected {
-  background-color: #064e3b;
-  border-color: #34d399;
-  color: #ffffff;
+.roomItemActive {
+  border-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
 }
 
-.roomSelectBtnOccupied {
-  background-color: #1a2234;
-  border-color: #1e293b;
-  color: #64748b;
+.roomItemDisabled {
+  opacity: 0.45;
   cursor: not-allowed;
-  opacity: 0.7;
+  background-color: #0b1120;
 }
 
-.roomStatusPill {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.2rem 0.5rem;
-  border-radius: 0.35rem;
+.roomSelectName {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin-bottom: 0.35rem;
 }
 
-.pillKosong {
-  background-color: #0284c7;
-  color: #ffffff;
+.badgeUsed {
+  font-size: 0.7rem;
+  color: #f87171;
+  font-weight: 600;
+  display: block;
 }
 
-.pillOccupied {
-  background-color: #334155;
-  color: #94a3b8;
+.badgeAvailable {
+  font-size: 0.7rem;
+  color: #34d399;
+  font-weight: 600;
+  display: block;
 }
 
 .btnCheckInSubmit {
   width: 100%;
-  background-color: #10b981;
-  color: #022c22;
-  font-weight: 800;
-  font-size: 0.95rem;
+  max-width: 360px;
+  padding: 0.85rem;
+  background-color: #059669;
+  color: #ffffff;
   border: none;
   border-radius: 0.65rem;
-  padding: 0.85rem;
+  font-weight: 800;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.btnCheckInSubmit:disabled {
-  background-color: #334155;
-  color: #64748b;
-  cursor: not-allowed;
+.btnCheckInSubmit:hover {
+  background-color: #047857;
 }
 
-/* Status Bilik Aktif di Header */
-.activeRoomBanner {
-  background: linear-gradient(135deg, #0f2b3e 0%, #081d2c 100%);
-  border: 1px solid #0284c7;
+/* BANNER TUGAS */
+.activeDutyBanner {
+  background-color: rgba(2, 132, 199, 0.1);
+  border: 1.5px solid #0284c7;
   border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1.15rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.25rem;
 }
 
-.roomInfoActive {
-  font-size: 0.85rem;
-  color: #e2e8f0;
+.dutyLabel {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin-right: 0.4rem;
 }
 
-.roomInfoActive strong {
+.dutyRoomName {
+  font-size: 0.95rem;
+  font-weight: 800;
   color: #38bdf8;
-  font-size: 1rem;
 }
 
-.btnCheckOut {
+.btnEndShift {
   background-color: #7f1d1d;
-  color: #fca5a5;
   border: 1px solid #991b1b;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
+  color: #fca5a5;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
-.btnCheckOut:hover {
-  background-color: #991b1b;
+/* TIADA PESAKIT */
+.emptyPatientCard {
+  background-color: #0f172a;
+  border: 1.5px dashed #334155;
+  border-radius: 0.85rem;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.emptyText {
+  font-size: 0.95rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.btnCallNext {
+  background-color: #0284c7;
+  border: none;
+  color: #ffffff;
+  padding: 0.85rem 1.75rem;
+  border-radius: 0.65rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btnCallNext:hover {
+  background-color: #0369a1;
+}
+
+/* KAD PESAKIT AKTIF */
+.patientActiveContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.patientInfoCard {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.85rem;
+  padding: 1.25rem;
+}
+
+.patientHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.queuePill {
+  display: inline-block;
+  background-color: #0284c7;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.2rem 0.65rem;
+  border-radius: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.patientNameTitle {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin: 0 0 0.35rem 0;
+}
+
+.patientMetaRow {
+  display: flex;
+  gap: 1.25rem;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.patientActionButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btnRecall {
+  background-color: #1e293b;
+  border: 1px solid #38bdf8;
+  color: #38bdf8;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btnSkip {
+  background-color: #1e293b;
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* DIAGNOSTIK */
+.diagnosticGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.diagCard {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.85rem;
+  padding: 1.25rem;
+}
+
+.sectionTitle {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin: 0 0 0.85rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* ========================================================
+   SUSUNAN GRID REAKSI RUQYAH KEMAS & PROFESIONAL
+   ======================================================== */
+.chipsContainer {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 lajur seragam di paparan telefon */
+  gap: 0.65rem;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .chipsContainer {
+    grid-template-columns: repeat(3, 1fr); /* 3 lajur sekata di komputer / tablet */
+    gap: 0.75rem;
+  }
+}
+
+.reaksiChip {
+  background-color: #1e293b;
+  border: 1.5px solid #334155;
+  color: #cbd5e1;
+  padding: 0.75rem 0.65rem;
+  border-radius: 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 52px; /* Ketinggian seragam untuk semua tag */
+  line-height: 1.3;
+  transition: all 0.2s ease-in-out;
+  user-select: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.reaksiChip:hover {
+  border-color: #38bdf8;
+  background-color: #273549;
+  color: #f8fafc;
+  transform: translateY(-1px);
+}
+
+/* Keadaan tag apabila dipilih (Aktif) */
+.reaksiChipActive {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border-color: #38bdf8;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+  transform: translateY(-1px);
+}
+
+/* Pilihan neutral 'Tiada Sebarang Reaksi (Normal)' merentangi 1 baris penuh */
+.reaksiChipFull {
+  grid-column: 1 / -1;
+  background-color: #0f172a;
+  border: 1.5px dashed #475569;
+  min-height: 44px;
+}
+
+.reaksiChipFull:hover {
+  border-color: #34d399;
+  background-color: rgba(5, 150, 105, 0.08);
+}
+
+.reaksiChipFull.reaksiChipActive {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border-color: #34d399;
+  border-style: solid;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+}
+
+/* SENARAI UBAT */
+.medicineList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.medicineRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #1e293b;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.5rem;
+  border: 1px solid #334155;
+}
+
+.medName {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.medPrice {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.1rem;
+}
+
+.medQtyControl {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btnQty {
+  background-color: #334155;
+  border: none;
+  color: #ffffff;
+  width: 26px;
+  height: 26px;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qtyNumber {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #38bdf8;
+  min-width: 18px;
+  text-align: center;
+}
+
+.btnAddMed {
+  background-color: #059669;
+  border: none;
+  color: #ffffff;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* CATATAN & MC */
+.textareaField {
+  width: 100%;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  color: #f1f5f9;
+  font-size: 0.85rem;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.mcRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  cursor: pointer;
+}
+
+.checkboxInput {
+  width: 18px;
+  height: 18px;
+  accent-color: #a855f7;
+  cursor: pointer;
+}
+
+.mcDaysRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.mcInput {
+  width: 55px;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  color: #ffffff;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* BAR TERAPUNG BAWAH */
+.bottomBarSubmit {
+  position: sticky;
+  bottom: 1rem;
+  background-color: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid #059669;
+  border-radius: 0.85rem;
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+
+.summaryLabel {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-right: 0.35rem;
+}
+
+.summaryValue {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #34d399;
+}
+
+.btnSubmitPharmacy {
+  background-color: #059669;
+  border: none;
+  color: #ffffff;
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.6rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: background-color 0.2s;
+}
+
+.btnSubmitPharmacy:hover {
+  background-color: #047857;
 }

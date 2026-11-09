@@ -1,6 +1,7 @@
+// app/admin/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import styles from './admin.module.css';
@@ -18,13 +19,13 @@ import {
   Stethoscope, 
   UserCheck, 
   History, 
-  MapPin,
-  Film,
-  Volume2,
-  Calendar,
-  TrendingUp,
-  DoorOpen,
-  Radio
+  Film, 
+  Volume2, 
+  Calendar, 
+  TrendingUp, 
+  DoorOpen, 
+  Radio,
+  Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -98,6 +99,15 @@ interface ItemTickerAdmin {
   created_at?: string;
 }
 
+interface ReaksiRuqyahAdmin {
+  id: string;
+  nama_reaksi: string;
+  keterangan?: string | null;
+  status_aktif: boolean;
+  turutan?: number;
+  created_at?: string;
+}
+
 export default function PapanPemukaAdmin() {
   const router = useRouter();
   const [sedangSemakSesi, setSedangSemakSesi] = useState(true);
@@ -107,14 +117,9 @@ export default function PapanPemukaAdmin() {
   const [tabAktif, setTabAktif] = useState<string>('kewangan');
   const [subTabInventori, setSubTabInventori] = useState<'baki' | 'masuk' | 'keluar' | 'semua'>('baki');
 
-  // Data Kewangan (Hari Ini, Mingguan, Bulanan & Tahunan)
-  const [senaraiTransaksi, setSenaraiTransaksi] = useState<any[]>([]);
-  const [jumlahKutipanHariIni, setJumlahKutipanHariIni] = useState(0);
-  const [jumlahKutipanMingguan, setJumlahKutipanMingguan] = useState(0);
-  const [jumlahKutipanBulanan, setJumlahKutipanBulanan] = useState(0);
-  const [jumlahKutipanTahunan, setJumlahKutipanTahunan] = useState(0);
-  const [kutipanTunai, setKutipanTunai] = useState(0);
-  const [kutipanQR, setKutipanQR] = useState(0);
+  // Penapis & Data Kewangan Dinamik
+  const [tempohKewanganPilihan, setTempohKewanganPilihan] = useState<'hari' | 'minggu' | 'bulan' | 'total'>('hari');
+  const [semuaTransaksiMasuk, setSemuaTransaksiMasuk] = useState<any[]>([]);
 
   // Data Inventori
   const [senaraiBahan, setSenaraiBahan] = useState<BahanPenawar[]>([]);
@@ -144,6 +149,14 @@ export default function PapanPemukaAdmin() {
   const [bilikDiedit, setBilikDiedit] = useState<BilikRawatanAdmin | null>(null);
   const [formNamaBilik, setFormNamaBilik] = useState('');
   const [selectedBilik, setSelectedBilik] = useState<number[]>([]);
+
+  // Data Pengurusan Reaksi Ruqyah (CRUD)
+  const [senaraiReaksi, setSenaraiReaksi] = useState<ReaksiRuqyahAdmin[]>([]);
+  const [bukaModalReaksi, setBukaModalReaksi] = useState(false);
+  const [reaksiDiedit, setReaksiDiedit] = useState<ReaksiRuqyahAdmin | null>(null);
+  const [formNamaReaksi, setFormNamaReaksi] = useState('');
+  const [formKeteranganReaksi, setFormKeteranganReaksi] = useState('');
+  const [selectedReaksi, setSelectedReaksi] = useState<string[]>([]);
 
   // Data Siaran Video TV
   const [senaraiVideo, setSenaraiVideo] = useState<VideoTV[]>([]);
@@ -186,7 +199,7 @@ export default function PapanPemukaAdmin() {
 
   const [memproses, setMemproses] = useState(false);
 
-  // 1. Semakan Sesi
+  // 1. Semakan Sesi Pentadbir
   useEffect(() => {
     const semakPengesahan = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -229,74 +242,90 @@ export default function PapanPemukaAdmin() {
     router.replace('/admin/login');
   };
 
-  // 2. Muat Data
+  // 2. Muat Semua Data Transaksi Masuk
   const muatDataKewangan = async () => {
-    const kini = new Date();
-    const tarikhHariIni = kini.toISOString().split('T')[0];
+    try {
+      const { data: dataSemuaMasuk } = await supabase
+        .from('lejar_kewangan')
+        .select('*, pesakit(nama, no_ic)')
+        .eq('jenis_transaksi', 'masuk')
+        .order('created_at', { ascending: false });
 
-    const tahunSemasa = kini.getFullYear();
-    const tarikhMulaTahun = `${tahunSemasa}-01-01`;
-
-    const bulanSemasa = String(kini.getMonth() + 1).padStart(2, '0');
-    const tarikhMulaBulan = `${tahunSemasa}-${bulanSemasa}-01`;
-
-    const hariMinggu = kini.getDay();
-    const diffKeIsnin = hariMinggu === 0 ? -6 : 1 - hariMinggu;
-    const tarikhIsnin = new Date(kini);
-    tarikhIsnin.setDate(kini.getDate() + diffKeIsnin);
-    const tarikhMulaMinggu = tarikhIsnin.toISOString().split('T')[0];
-
-    const { data: dataHariIni } = await supabase
-      .from('lejar_kewangan')
-      .select('*, pesakit(nama, no_ic)')
-      .eq('tarikh', tarikhHariIni)
-      .order('created_at', { ascending: false });
-
-    if (dataHariIni) {
-      setSenaraiTransaksi(dataHariIni);
-      let totalHariIni = 0;
-      let tunai = 0;
-      let qr = 0;
-
-      dataHariIni.forEach((trx) => {
-        const val = Number(trx.jumlah) || 0;
-        if (trx.jenis_transaksi === 'masuk') {
-          totalHariIni += val;
-          if (trx.kaedah_bayaran === 'tunai') tunai += val;
-          if (trx.kaedah_bayaran === 'duitnow_qr') qr += val;
-        }
-      });
-
-      setJumlahKutipanHariIni(totalHariIni);
-      setKutipanTunai(tunai);
-      setKutipanQR(qr);
-    }
-
-    const { data: dataSemuaMasuk } = await supabase
-      .from('lejar_kewangan')
-      .select('jumlah, tarikh, jenis_transaksi, created_at')
-      .eq('jenis_transaksi', 'masuk');
-
-    if (dataSemuaMasuk) {
-      let totalMingguan = 0;
-      let totalBulanan = 0;
-      let totalTahunan = 0;
-
-      dataSemuaMasuk.forEach((trx) => {
-        const val = Number(trx.jumlah) || 0;
-        const tarikhTrx = trx.tarikh || (trx.created_at ? trx.created_at.split('T')[0] : '');
-
-        if (tarikhTrx >= tarikhMulaTahun) totalTahunan += val;
-        if (tarikhTrx >= tarikhMulaBulan) totalBulanan += val;
-        if (tarikhTrx >= tarikhMulaMinggu) totalMingguan += val;
-      });
-
-      setJumlahKutipanMingguan(totalMingguan);
-      setJumlahKutipanBulanan(totalBulanan);
-      setJumlahKutipanTahunan(totalTahunan);
+      if (dataSemuaMasuk) {
+        setSemuaTransaksiMasuk(dataSemuaMasuk);
+      }
+    } catch (err) {
+      console.warn('Ralat memuat data kewangan:', err);
     }
   };
 
+  // 3. Pengiraan Tarikh & Penapis Transaksi Dinamik
+  const tarikhHariIni = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  const tarikhMulaMinggu = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const tarikhMulaBulan = useMemo(() => {
+    const d = new Date();
+    const bulan = String(d.getMonth() + 1).padStart(2, '0');
+    return `${d.getFullYear()}-${bulan}-01`;
+  }, []);
+
+  // Kiraan Ringkasan 4 Kad Utama
+  const ringkasanKutipan = useMemo(() => {
+    let hariIni = 0;
+    let mingguIni = 0;
+    let bulanIni = 0;
+    let totalKutipan = 0;
+
+    semuaTransaksiMasuk.forEach((trx) => {
+      const val = Number(trx.jumlah) || 0;
+      const t = trx.tarikh || (trx.created_at ? trx.created_at.split('T')[0] : '');
+
+      totalKutipan += val;
+      if (t === tarikhHariIni) hariIni += val;
+      if (t >= tarikhMulaMinggu) mingguIni += val;
+      if (t >= tarikhMulaBulan) bulanIni += val;
+    });
+
+    return { hariIni, mingguIni, bulanIni, totalKutipan };
+  }, [semuaTransaksiMasuk, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan]);
+
+  // Transaksi Ditapis Mengikut Kad Yang Dipilih
+  const transaksiDitapis = useMemo(() => {
+    return semuaTransaksiMasuk.filter((trx) => {
+      const t = trx.tarikh || (trx.created_at ? trx.created_at.split('T')[0] : '');
+      if (tempohKewanganPilihan === 'hari') return t === tarikhHariIni;
+      if (tempohKewanganPilihan === 'minggu') return t >= tarikhMulaMinggu;
+      if (tempohKewanganPilihan === 'bulan') return t >= tarikhMulaBulan;
+      return true; // 'total'
+    });
+  }, [semuaTransaksiMasuk, tempohKewanganPilihan, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan]);
+
+  // Pecahan Kutipan (Tunai / QR / Resit) Mengikut Kad Yang Aktif
+  const pecahanKutipanAktif = useMemo(() => {
+    let tunai = 0;
+    let qr = 0;
+
+    transaksiDitapis.forEach((trx) => {
+      const val = Number(trx.jumlah) || 0;
+      if (trx.kaedah_bayaran === 'tunai') tunai += val;
+      if (trx.kaedah_bayaran === 'duitnow_qr') qr += val;
+    });
+
+    return {
+      tunai,
+      qr,
+      bilanganResit: transaksiDitapis.length
+    };
+  }, [transaksiDitapis]);
+
+  // Muat Data Modul Lain
   const muatDataInventori = async () => {
     const { data: bahan } = await supabase
       .from('bahan_penawar')
@@ -338,6 +367,15 @@ export default function PapanPemukaAdmin() {
     if (data) setSenaraiBilik(data);
   };
 
+  const muatDataReaksi = async () => {
+    const { data } = await supabase
+      .from('reaksi_ruqyah')
+      .select('*')
+      .order('turutan', { ascending: true })
+      .order('nama_reaksi', { ascending: true });
+    if (data) setSenaraiReaksi(data);
+  };
+
   const muatDataVideo = async () => {
     const { data } = await supabase
       .from('video_tv')
@@ -375,6 +413,7 @@ export default function PapanPemukaAdmin() {
       if (profilAdmin.peranan === 'super_admin') {
         muatDataPerawat();
         muatDataBilik();
+        muatDataReaksi();
         muatDataVideo();
         muatDataTicker();
         muatDataAdmin();
@@ -382,7 +421,7 @@ export default function PapanPemukaAdmin() {
     }
   }, [sedangSemakSesi, profilAdmin]);
 
-  // A. Inventori
+  // A. Tindakan Inventori
   const toggleSelectAllBahan = () => {
     if (selectedBahan.length === senaraiBahan.length) {
       setSelectedBahan([]);
@@ -409,7 +448,7 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // B. Pesakit
+  // B. Tindakan Pesakit
   const senaraiPesakitDitapis = senaraiPesakit.filter(
     (p) =>
       p.nama.toLowerCase().includes(carianPesakit.toLowerCase()) ||
@@ -443,7 +482,7 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // C. Perawat
+  // C. Tindakan Perawat
   const toggleSelectAllPerawat = () => {
     if (selectedPerawat.length === senaraiPerawat.length) {
       setSelectedPerawat([]);
@@ -470,7 +509,7 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // D. Tindakan Kawalan Bilik Rawatan (Bebas Dialog Sekatan Pelayar)
+  // D. Tindakan Kawalan Bilik Rawatan
   const toggleSelectAllBilik = () => {
     if (selectedBilik.length === senaraiBilik.length) {
       setSelectedBilik([]);
@@ -485,7 +524,6 @@ export default function PapanPemukaAdmin() {
     );
   };
 
-  // PADAM PUKAL BILIK RAWATAN: TERUS BERFUNGSI TANPA DIALOG POP-UP
   const padamBilikPukal = async () => {
     if (selectedBilik.length === 0) return;
     setMemproses(true);
@@ -501,7 +539,6 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // PADAM SATU BILIK RAWATAN: TERUS BERFUNGSI TANPA DIALOG POP-UP
   const tanganiPadamSatuBilik = async (id: number) => {
     setMemproses(true);
     try {
@@ -580,7 +617,99 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // E. Video TV (Tambah, Edit & Padam)
+  // E. Tindakan Reaksi Ruqyah (CRUD Penuh)
+  const toggleSelectAllReaksi = () => {
+    if (selectedReaksi.length === senaraiReaksi.length) {
+      setSelectedReaksi([]);
+    } else {
+      setSelectedReaksi(senaraiReaksi.map((r) => r.id));
+    }
+  };
+
+  const toggleSelectReaksi = (id: string) => {
+    setSelectedReaksi((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleStatusReaksi = async (r: ReaksiRuqyahAdmin) => {
+    setMemproses(true);
+    try {
+      await supabase.from('reaksi_ruqyah').update({
+        status_aktif: !r.status_aktif
+      }).eq('id', r.id);
+      muatDataReaksi();
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  const tanganiPadamSatuReaksi = async (id: string) => {
+    setMemproses(true);
+    try {
+      await supabase.from('reaksi_ruqyah').delete().eq('id', id);
+      setSelectedReaksi((prev) => prev.filter((item) => item !== id));
+      muatDataReaksi();
+    } catch (err: any) {
+      alert('Ralat memadam reaksi: ' + err.message);
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  const padamReaksiPukal = async () => {
+    if (selectedReaksi.length === 0) return;
+    setMemproses(true);
+    try {
+      await supabase.from('reaksi_ruqyah').delete().in('id', selectedReaksi);
+      setSelectedReaksi([]);
+      muatDataReaksi();
+    } catch (err: any) {
+      alert('Ralat memadam reaksi: ' + err.message);
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  const simpanReaksi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formNamaReaksi.trim()) return;
+
+    setMemproses(true);
+    try {
+      if (reaksiDiedit) {
+        const { error } = await supabase.from('reaksi_ruqyah').update({
+          nama_reaksi: formNamaReaksi.trim(),
+          keterangan: formKeteranganReaksi.trim() || null
+        }).eq('id', reaksiDiedit.id);
+
+        if (error) throw error;
+        alert('Reaksi ruqyah berjaya dikemaskini!');
+      } else {
+        const { error } = await supabase.from('reaksi_ruqyah').insert({
+          nama_reaksi: formNamaReaksi.trim(),
+          keterangan: formKeteranganReaksi.trim() || null,
+          status_aktif: true,
+          turutan: senaraiReaksi.length + 1
+        });
+
+        if (error) throw error;
+        alert('Reaksi ruqyah baharu berjaya ditambah!');
+      }
+
+      setBukaModalReaksi(false);
+      setReaksiDiedit(null);
+      setFormNamaReaksi('');
+      setFormKeteranganReaksi('');
+      muatDataReaksi();
+    } catch (err: any) {
+      alert('Ralat: ' + err.message);
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  // F. Video TV (Tambah, Edit & Padam)
   const toggleSelectAllVideo = () => {
     if (selectedVideo.length === senaraiVideo.length) {
       setSelectedVideo([]);
@@ -663,7 +792,7 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // F. Siaran Ticker TV (Tambah, Edit, Toggle & Padam)
+  // G. Siaran Ticker TV (Tambah, Edit, Toggle & Padam)
   const simpanTicker = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTeksMaksud.trim()) return;
@@ -732,7 +861,7 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // G. Admin
+  // H. Admin
   const adminBolehDipadam = senaraiSemuaAdmin.filter((a) => a.id !== profilAdmin?.id);
 
   const toggleSelectAllAdmin = () => {
@@ -935,189 +1064,962 @@ export default function PapanPemukaAdmin() {
   const isKewangan = isSuper || profilAdmin?.peranan === 'admin_kewangan_inventori';
   const isPesakit = isSuper || profilAdmin?.peranan === 'admin_pesakit';
 
+  const labelTempoh = {
+    hari: 'Hari Ini',
+    minggu: 'Minggu Ini',
+    bulan: 'Bulan Ini',
+    total: 'Keseluruhan (Total Kutipan)'
+  }[tempohKewanganPilihan];
+
   return (
-    <div className={styles.container}>
-      <div style={{ marginBottom: '1rem' }} className={styles.noPrint}>
-        <Link href="/" style={{ color: '#64748b', fontSize: '0.85rem', textDecoration: 'none' }}>
-          ← Menu Utama
-        </Link>
-      </div>
+    <div style={{ minHeight: '100vh', backgroundColor: '#0b1120', width: '100%', padding: '1.5rem', boxSizing: 'border-box' }}>
+      {/* GAYA CETAKAN RASMI A4 */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        #print-financial-report {
+          display: none;
+        }
 
-      <div className={styles.printHeaderInfo}>
-        <h1 className={styles.printClinicTitle}>Pusat Rawatan Islam Darul Syifa'</h1>
-        <p className={styles.printReportTitle}>LAPORAN SISTEM PENGURUSAN SYIFALINK</p>
-        <p className={styles.printMeta}>Tarikh: {new Date().toLocaleDateString('ms-MY')}</p>
-      </div>
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+          }
+          html, body {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+            font-size: 10pt !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .screen-only-wrapper {
+            display: none !important;
+          }
+          #print-financial-report {
+            display: block !important;
+            width: 100% !important;
+            color: #0f172a !important;
+            background: #ffffff !important;
+          }
+          .print-header-box {
+            text-align: center;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+          }
+          .print-clinic-name {
+            font-size: 15pt;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+            letter-spacing: 0.5px;
+          }
+          .print-doc-title {
+            font-size: 10pt;
+            font-weight: 600;
+            color: #475569;
+            margin: 3px 0 0 0;
+            text-transform: uppercase;
+          }
+          .print-meta-grid {
+            display: flex;
+            justify-content: space-between;
+            font-size: 8.5pt;
+            color: #64748b;
+            margin-top: 6px;
+          }
+          .print-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+          }
+          .print-summary-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            padding: 6px 8px;
+            background-color: #f8fafc;
+          }
+          .print-summary-label {
+            font-size: 7.5pt;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+          }
+          .print-summary-value {
+            font-size: 11pt;
+            font-weight: 600;
+            color: #0f172a;
+            margin-top: 2px;
+          }
+          .print-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5pt;
+          }
+          .print-table th {
+            background-color: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            padding: 5px 7px;
+            font-weight: 600;
+            text-align: left;
+            color: #1e293b;
+          }
+          .print-table td {
+            border: 1px solid #e2e8f0;
+            padding: 5px 7px;
+            color: #334155;
+          }
+          .print-signatures {
+            margin-top: 35px;
+            display: flex;
+            justify-content: space-between;
+            page-break-inside: avoid;
+          }
+          .print-sig-box {
+            width: 180px;
+            text-align: center;
+            font-size: 8.5pt;
+          }
+          .print-sig-line {
+            border-bottom: 1px solid #0f172a;
+            margin-top: 45px;
+            margin-bottom: 4px;
+          }
+        }
+      `}} />
 
-      <header className={`${styles.header} ${styles.noPrint}`}>
-        <div>
-          <h1 className={styles.title}>
-            <Layers size={28} /> Pusat Pentadbir
-            <span className={styles.adminRoleBadge}>
-              {profilAdmin?.peranan.replace(/_/g, ' ')}
-            </span>
-          </h1>
-          <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
-            Log masuk sebagai: <strong>{profilAdmin?.nama}</strong> ({profilAdmin?.email})
-          </p>
+      {/* DOKUMEN CETAKAN KHAS (HANYA MUNCUL DI PRINT WINDOW) */}
+      <div id="print-financial-report">
+        <div className="print-header-box">
+          <h1 className="print-clinic-name">PUSAT RAWATAN ISLAM DARUL SYIFA'</h1>
+          <p className="print-doc-title">Laporan Penyata Kutipan & Aliran Tunai ({labelTempoh})</p>
+          <div className="print-meta-grid">
+            <span>Tarikh: {new Date().toLocaleDateString('ms-MY')} {new Date().toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>Pegawai: {profilAdmin?.nama} ({profilAdmin?.peranan.replace(/_/g, ' ')})</span>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => window.print()} style={{ backgroundColor: '#1e293b', color: '#38bdf8', border: '1px solid #334155', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Printer size={16} /> Cetak
-          </button>
-          <button onClick={tanganiLogKeluar} style={{ backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <LogOut size={16} /> Keluar
-          </button>
+        <div className="print-summary-grid">
+          <div className="print-summary-card">
+            <div className="print-summary-label">Kutipan ({labelTempoh})</div>
+            <div className="print-summary-value">
+              RM {(pecahanKutipanAktif.tunai + pecahanKutipanAktif.qr).toFixed(2)}
+            </div>
+          </div>
+          <div className="print-summary-card">
+            <div className="print-summary-label">Kutipan Tunai</div>
+            <div className="print-summary-value">RM {pecahanKutipanAktif.tunai.toFixed(2)}</div>
+          </div>
+          <div className="print-summary-card">
+            <div className="print-summary-label">DuitNow QR</div>
+            <div className="print-summary-value">RM {pecahanKutipanAktif.qr.toFixed(2)}</div>
+          </div>
+          <div className="print-summary-card">
+            <div className="print-summary-label">Bilangan Resit</div>
+            <div className="print-summary-value">{pecahanKutipanAktif.bilanganResit} Resit</div>
+          </div>
         </div>
-      </header>
 
-      {/* Navigasi Tab */}
-      <div className={`${styles.tabBar} ${styles.noPrint}`}>
-        {isKewangan && (
-          <>
-            <button onClick={() => setTabAktif('kewangan')} className={`${styles.tabBtn} ${tabAktif === 'kewangan' ? styles.tabBtnActive : ''}`}>
-              <DollarSign size={18} /> Aliran Tunai & Penyata
-            </button>
-            <button onClick={() => setTabAktif('inventori')} className={`${styles.tabBtn} ${tabAktif === 'inventori' ? styles.tabBtnActive : ''}`}>
-              <Package size={18} /> Inventori & Stok
-            </button>
-          </>
-        )}
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th style={{ width: '35px', textAlign: 'center' }}>No.</th>
+              <th>No. Resit</th>
+              <th>Tarikh & Masa</th>
+              <th>Nama Pesakit</th>
+              <th>No. K/P</th>
+              <th>Kaedah</th>
+              <th style={{ textAlign: 'right' }}>Jumlah (RM)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transaksiDitapis.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '12px' }}>
+                  Tiada rekod transaksi bagi tempoh {labelTempoh}.
+                </td>
+              </tr>
+            ) : (
+              transaksiDitapis.map((trx, idx) => (
+                <tr key={trx.id}>
+                  <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                  <td>{trx.no_resit}</td>
+                  <td>{new Date(trx.created_at).toLocaleDateString('ms-MY')} {new Date(trx.created_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>{trx.pesakit?.nama || 'Pesakit Am'}</td>
+                  <td>{trx.pesakit?.no_ic || '-'}</td>
+                  <td>{trx.kaedah_bayaran === 'tunai' ? 'Tunai' : 'DuitNow QR'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>RM {Number(trx.jumlah).toFixed(2)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
 
-        {isPesakit && (
-          <button onClick={() => setTabAktif('pesakit')} className={`${styles.tabBtn} ${tabAktif === 'pesakit' ? styles.tabBtnActive : ''}`}>
-            <Users size={18} /> Direktori & Sejarah Pesakit
-          </button>
-        )}
-
-        {isSuper && (
-          <>
-            <button onClick={() => setTabAktif('perawat')} className={`${styles.tabBtn} ${tabAktif === 'perawat' ? styles.tabBtnActive : ''}`}>
-              <Stethoscope size={18} /> Portfolio Perawat
-            </button>
-            <button onClick={() => setTabAktif('bilik')} className={`${styles.tabBtn} ${tabAktif === 'bilik' ? styles.tabBtnActive : ''}`}>
-              <DoorOpen size={18} /> Kawalan Bilik Rawatan
-            </button>
-            <button onClick={() => setTabAktif('video')} className={`${styles.tabBtn} ${tabAktif === 'video' ? styles.tabBtnActive : ''}`}>
-              <Film size={18} /> Siaran Video TV
-            </button>
-            <button onClick={() => setTabAktif('ticker')} className={`${styles.tabBtn} ${tabAktif === 'ticker' ? styles.tabBtnActive : ''}`}>
-              <Radio size={18} /> Siaran Ticker TV
-            </button>
-            <button onClick={() => setTabAktif('admin')} className={`${styles.tabBtn} ${tabAktif === 'admin' ? styles.tabBtnActive : ''}`}>
-              <UserCheck size={18} /> Lantikan Pentadbir
-            </button>
-          </>
-        )}
+        <div className="print-signatures">
+          <div className="print-sig-box">
+            <div className="print-sig-line"></div>
+            <strong>Disediakan Oleh</strong>
+            <div>Pegawai Farmasi / Kewangan</div>
+          </div>
+          <div className="print-sig-box">
+            <div className="print-sig-line"></div>
+            <strong>Disahkan Oleh</strong>
+            <div>Pengurus / Tabib Kanan</div>
+          </div>
+        </div>
       </div>
 
-      {/* ===================== TAB 1: ALIRAN TUNAI & PENYATA ===================== */}
-      {tabAktif === 'kewangan' && isKewangan && (
-        <div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '1rem',
-            marginBottom: '1rem'
-          }}>
-            <div style={{ backgroundColor: '#1e293b', border: '1.5px solid #059669', borderRadius: '0.75rem', padding: '1.15rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#34d399', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <TrendingUp size={16} /> Kutipan Hari Ini
+      {/* ========================================================
+          PAPARAN SKRIN SISTEM (SEIMBANG & PENUH KANAN-KIRI)
+         ======================================================== */}
+      <div className="screen-only-wrapper" style={{ width: '100%', maxWidth: '1440px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <Link href="/" style={{ color: '#64748b', fontSize: '0.85rem', textDecoration: 'none' }}>
+            ← Menu Utama
+          </Link>
+        </div>
+
+        <header className={styles.header} style={{ marginBottom: '1.25rem' }}>
+          <div>
+            <h1 className={styles.title} style={{ fontWeight: 600, fontSize: '1.35rem' }}>
+              <Layers size={24} /> Pusat Pentadbir
+              <span className={styles.adminRoleBadge} style={{ fontWeight: 500, fontSize: '0.72rem' }}>
+                {profilAdmin?.peranan.replace(/_/g, ' ')}
+              </span>
+            </h1>
+            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.82rem', color: '#94a3b8', fontWeight: 400 }}>
+              Log masuk sebagai: <strong>{profilAdmin?.nama}</strong> ({profilAdmin?.email})
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button 
+              onClick={() => window.print()} 
+              style={{ 
+                backgroundColor: '#1e293b', 
+                color: '#38bdf8', 
+                border: '1px solid #334155', 
+                padding: '0.45rem 0.85rem', 
+                borderRadius: '0.45rem', 
+                fontWeight: 500, 
+                fontSize: '0.82rem', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.4rem' 
+              }}
+            >
+              <Printer size={15} /> Cetak Laporan
+            </button>
+            <button 
+              onClick={tanganiLogKeluar} 
+              style={{ 
+                backgroundColor: '#7f1d1d', 
+                color: '#fca5a5', 
+                border: '1px solid #991b1b', 
+                padding: '0.45rem 0.85rem', 
+                borderRadius: '0.45rem', 
+                fontWeight: 500, 
+                fontSize: '0.82rem', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.4rem' 
+              }}
+            >
+              <LogOut size={15} /> Keluar
+            </button>
+          </div>
+        </header>
+
+        {/* Navigasi Tab */}
+        <div className={styles.tabBar} style={{ marginBottom: '1.25rem' }}>
+          {isKewangan && (
+            <>
+              <button onClick={() => setTabAktif('kewangan')} className={`${styles.tabBtn} ${tabAktif === 'kewangan' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <DollarSign size={16} /> Aliran Tunai & Penyata
+              </button>
+              <button onClick={() => setTabAktif('inventori')} className={`${styles.tabBtn} ${tabAktif === 'inventori' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <Package size={16} /> Inventori & Stok
+              </button>
+            </>
+          )}
+
+          {isPesakit && (
+            <button onClick={() => setTabAktif('pesakit')} className={`${styles.tabBtn} ${tabAktif === 'pesakit' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+              <Users size={16} /> Direktori & Sejarah Pesakit
+            </button>
+          )}
+
+          {isSuper && (
+            <>
+              <button onClick={() => setTabAktif('perawat')} className={`${styles.tabBtn} ${tabAktif === 'perawat' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <Stethoscope size={16} /> Portfolio Perawat
+              </button>
+              <button onClick={() => setTabAktif('bilik')} className={`${styles.tabBtn} ${tabAktif === 'bilik' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <DoorOpen size={16} /> Kawalan Bilik Rawatan
+              </button>
+              <button onClick={() => setTabAktif('reaksi')} className={`${styles.tabBtn} ${tabAktif === 'reaksi' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <Sparkles size={16} /> Reaksi Ruqyah
+              </button>
+              <button onClick={() => setTabAktif('video')} className={`${styles.tabBtn} ${tabAktif === 'video' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <Film size={16} /> Siaran Video TV
+              </button>
+              <button onClick={() => setTabAktif('ticker')} className={`${styles.tabBtn} ${tabAktif === 'ticker' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <Radio size={16} /> Siaran Ticker TV
+              </button>
+              <button onClick={() => setTabAktif('admin')} className={`${styles.tabBtn} ${tabAktif === 'admin' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
+                <UserCheck size={16} /> Lantikan Pentadbir
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* ===================== TAB 1: ALIRAN TUNAI & PENYATA ===================== */}
+        {tabAktif === 'kewangan' && isKewangan && (
+          <div style={{ width: '100%' }}>
+            <p style={{ margin: '0 0 0.85rem 0', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 400 }}>
+              💡 <em>Klik pada mana-mana kad tempoh kutipan di bawah untuk melihat perincian dan transaksi spesifik:</em>
+            </p>
+
+            {/* 4 KAD INTERAKTIF SEIMBANG 4 LAJUR (NIPIS & KEMAS) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '1rem',
+              marginBottom: '1.25rem'
+            }}>
+              {/* KAD 1: HARI INI */}
+              <div 
+                onClick={() => setTempohKewanganPilihan('hari')}
+                style={{ 
+                  backgroundColor: '#1e293b', 
+                  border: tempohKewanganPilihan === 'hari' ? '1.5px solid #10b981' : '1px solid #334155', 
+                  borderRadius: '0.75rem', 
+                  padding: '1rem 1.15rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: tempohKewanganPilihan === 'hari' ? '0 4px 15px rgba(16, 185, 129, 0.2)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#34d399', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    <TrendingUp size={14} /> Kutipan Hari Ini
+                  </div>
+                  {tempohKewanganPilihan === 'hari' && (
+                    <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 500, backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                      Dipilih
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#10b981', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                  RM {ringkasanKutipan.hariIni.toFixed(2)}
+                </div>
               </div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10b981', marginTop: '0.4rem' }}>
-                RM {jumlahKutipanHariIni.toFixed(2)}
+
+              {/* KAD 2: MINGGU INI */}
+              <div 
+                onClick={() => setTempohKewanganPilihan('minggu')}
+                style={{ 
+                  backgroundColor: '#1e293b', 
+                  border: tempohKewanganPilihan === 'minggu' ? '1.5px solid #06b6d4' : '1px solid #334155', 
+                  borderRadius: '0.75rem', 
+                  padding: '1rem 1.15rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: tempohKewanganPilihan === 'minggu' ? '0 4px 15px rgba(6, 182, 212, 0.2)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    <Calendar size={14} /> Kutipan Minggu Ini
+                  </div>
+                  {tempohKewanganPilihan === 'minggu' && (
+                    <span style={{ fontSize: '0.65rem', color: '#06b6d4', fontWeight: 500, backgroundColor: 'rgba(6, 182, 212, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                      Dipilih
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#06b6d4', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                  RM {ringkasanKutipan.mingguIni.toFixed(2)}
+                </div>
+              </div>
+
+              {/* KAD 3: BULAN INI */}
+              <div 
+                onClick={() => setTempohKewanganPilihan('bulan')}
+                style={{ 
+                  backgroundColor: '#1e293b', 
+                  border: tempohKewanganPilihan === 'bulan' ? '1.5px solid #38bdf8' : '1px solid #334155', 
+                  borderRadius: '0.75rem', 
+                  padding: '1rem 1.15rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: tempohKewanganPilihan === 'bulan' ? '0 4px 15px rgba(56, 189, 248, 0.2)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#38bdf8', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    <Calendar size={14} /> Kutipan Bulan Ini
+                  </div>
+                  {tempohKewanganPilihan === 'bulan' && (
+                    <span style={{ fontSize: '0.65rem', color: '#38bdf8', fontWeight: 500, backgroundColor: 'rgba(56, 189, 248, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                      Dipilih
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#38bdf8', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                  RM {ringkasanKutipan.bulanIni.toFixed(2)}
+                </div>
+              </div>
+
+              {/* KAD 4: TOTAL KUTIPAN */}
+              <div 
+                onClick={() => setTempohKewanganPilihan('total')}
+                style={{ 
+                  backgroundColor: '#1e293b', 
+                  border: tempohKewanganPilihan === 'total' ? '1.5px solid #a855f7' : '1px solid #334155', 
+                  borderRadius: '0.75rem', 
+                  padding: '1rem 1.15rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: tempohKewanganPilihan === 'total' ? '0 4px 15px rgba(168, 85, 247, 0.2)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    <DollarSign size={14} /> Total Kutipan
+                  </div>
+                  {tempohKewanganPilihan === 'total' && (
+                    <span style={{ fontSize: '0.65rem', color: '#c084fc', fontWeight: 500, backgroundColor: 'rgba(168, 85, 247, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                      Dipilih
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#c084fc', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                  RM {ringkasanKutipan.totalKutipan.toFixed(2)}
+                </div>
               </div>
             </div>
 
-            <div style={{ backgroundColor: '#1e293b', border: '1.5px solid #0891b2', borderRadius: '0.75rem', padding: '1.15rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <Calendar size={16} /> Kutipan Minggu Ini
+            {/* 3 KOTAK PECAHAN (SEIMBANG & PENUH) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '0.75rem', padding: '0.9rem 1.1rem' }}>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400 }}>
+                  Kutipan Tunai ({labelTempoh}):
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#f1f5f9', marginTop: '0.2rem' }}>
+                  RM {pecahanKutipanAktif.tunai.toFixed(2)}
+                </div>
               </div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#06b6d4', marginTop: '0.4rem' }}>
-                RM {jumlahKutipanMingguan.toFixed(2)}
+
+              <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '0.75rem', padding: '0.9rem 1.1rem' }}>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400 }}>
+                  Kutipan DuitNow QR ({labelTempoh}):
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#38bdf8', marginTop: '0.2rem' }}>
+                  RM {pecahanKutipanAktif.qr.toFixed(2)}
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '0.75rem', padding: '0.9rem 1.1rem' }}>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400 }}>
+                  Bilangan Resit ({labelTempoh}):
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#f59e0b', marginTop: '0.2rem' }}>
+                  {pecahanKutipanAktif.bilanganResit} Resit
+                </div>
               </div>
             </div>
 
-            <div style={{ backgroundColor: '#1e293b', border: '1.5px solid #0284c7', borderRadius: '0.75rem', padding: '1.15rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#38bdf8', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <Calendar size={16} /> Kutipan Bulan Ini
+            {/* JADUAL TRANSAKSI PENUH (LEBAR 100% TANPA KOSONG DI KANAN) */}
+            <div className={styles.cardPanel} style={{ width: '100%', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+                <div>
+                  <h2 className={styles.panelTitle} style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                    Rekod Transaksi Masuk — {labelTempoh}
+                  </h2>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.75rem', color: '#64748b', fontWeight: 400 }}>
+                    Menunjukkan {transaksiDitapis.length} transaksi bagi pilihan aktif
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    backgroundColor: '#1e293b',
+                    color: '#38bdf8',
+                    border: '1px solid #334155',
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: '0.4rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <Printer size={13} /> Cetak Penyata
+                </button>
               </div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#38bdf8', marginTop: '0.4rem' }}>
-                RM {jumlahKutipanBulanan.toFixed(2)}
-              </div>
-            </div>
 
-            <div style={{ backgroundColor: '#1e293b', border: '1.5px solid #7c3aed', borderRadius: '0.75rem', padding: '1.15rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                <DollarSign size={16} /> Kutipan Tahun Ini
-              </div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#a855f7', marginTop: '0.4rem' }}>
-                RM {jumlahKutipanTahunan.toFixed(2)}
+              <div className={styles.tableWrapper}>
+                <table className={styles.table} style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '45px', textAlign: 'center', fontWeight: 500, fontSize: '0.78rem' }}>No.</th>
+                      <th style={{ fontWeight: 500, fontSize: '0.78rem' }}>No. Resit</th>
+                      <th style={{ fontWeight: 500, fontSize: '0.78rem' }}>Hari / Tarikh</th>
+                      <th style={{ fontWeight: 500, fontSize: '0.78rem' }}>Masa</th>
+                      <th style={{ fontWeight: 500, fontSize: '0.78rem' }}>Nama Pesakit</th>
+                      <th style={{ fontWeight: 500, fontSize: '0.78rem' }}>Kaedah Bayaran</th>
+                      <th style={{ textAlign: 'right', fontWeight: 500, fontSize: '0.78rem' }}>Jumlah (RM)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transaksiDitapis.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b', fontSize: '0.85rem' }}>
+                          Tiada rekod transaksi bagi tempoh {labelTempoh}.
+                        </td>
+                      </tr>
+                    ) : (
+                      transaksiDitapis.map((trx, idx) => (
+                        <tr key={trx.id}>
+                          <td style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>{idx + 1}</td>
+                          <td style={{ color: '#38bdf8', fontWeight: 500, fontSize: '0.8rem' }}>{trx.no_resit}</td>
+                          <td style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>{new Date(trx.created_at).toLocaleDateString('ms-MY')}</td>
+                          <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                            {new Date(trx.created_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td style={{ fontWeight: 500, color: '#f1f5f9', fontSize: '0.8rem' }}>
+                            {trx.pesakit?.nama || 'Pesakit Am'}
+                          </td>
+                          <td>
+                            <span 
+                              className={`${styles.badgeMethod} ${trx.kaedah_bayaran === 'tunai' ? styles.methodCash : styles.methodQR}`}
+                              style={{ fontWeight: 500, fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
+                            >
+                              {trx.kaedah_bayaran === 'tunai' ? 'Tunai' : 'DuitNow QR'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', color: '#34d399', fontWeight: 600, fontSize: '0.82rem' }}>
+                            +RM {Number(trx.jumlah).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
+        )}
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '1rem',
-            marginBottom: '1.5rem'
-          }}>
-            <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '0.75rem', padding: '1rem' }}>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>Kutipan Tunai Hari Ini (Laci):</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#f1f5f9', marginTop: '0.3rem' }}>
-                RM {kutipanTunai.toFixed(2)}
-              </div>
+        {/* ===================== TAB 2: INVENTORI & STOK ===================== */}
+        {tabAktif === 'inventori' && isKewangan && (
+          <div style={{ width: '100%' }}>
+            <div className={styles.subTabBar}>
+              <button onClick={() => setSubTabInventori('baki')} className={`${styles.subTabBtn} ${subTabInventori === 'baki' ? styles.subTabBtnActive : ''}`} style={{ fontWeight: 500 }}>Katalog Item</button>
+              <button onClick={() => setSubTabInventori('masuk')} className={`${styles.subTabBtn} ${subTabInventori === 'masuk' ? styles.subTabMasukActive : ''}`} style={{ fontWeight: 500 }}>Stok Masuk</button>
+              <button onClick={() => setSubTabInventori('keluar')} className={`${styles.subTabBtn} ${subTabInventori === 'keluar' ? styles.subTabKeluarActive : ''}`} style={{ fontWeight: 500 }}>Stok Keluar</button>
             </div>
 
-            <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '0.75rem', padding: '1rem' }}>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>Kutipan DuitNow QR Hari Ini (Bank):</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.3rem' }}>
-                RM {kutipanQR.toFixed(2)}
-              </div>
-            </div>
+            {subTabInventori === 'baki' && (
+              <div className={styles.cardPanel}>
+                <div className={styles.tableHeaderActionRow}>
+                  <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Katalog Inventori & Stok Semasa</h2></div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {selectedBahan.length > 0 && (
+                      <button onClick={padamBahanPukal} disabled={memproses} className={styles.btnBulkDelete}>
+                        <Trash2 size={13} /> Padam Terpilih ({selectedBahan.length})
+                      </button>
+                    )}
+                    <button onClick={() => setBukaModalTambahBahan(true)} className={styles.btnAction} style={{ fontWeight: 500 }}>
+                      <PlusCircle size={14} /> Daftar Item
+                    </button>
+                  </div>
+                </div>
 
-            <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '0.75rem', padding: '1rem' }}>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>Bilangan Resit Hari Ini:</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#f59e0b', marginTop: '0.3rem' }}>
-                {senaraiTransaksi.length} Resit
+                <div className={styles.tableWrapper}>
+                  <table className={styles.table} style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>
+                          <input type="checkbox" className={styles.tableCheckbox} checked={senaraiBahan.length > 0 && selectedBahan.length === senaraiBahan.length} onChange={toggleSelectAllBahan} />
+                        </th>
+                        <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                        <th style={{ fontWeight: 500 }}>Nama Item</th>
+                        <th style={{ fontWeight: 500 }}>Kategori</th>
+                        <th style={{ fontWeight: 500 }}>Harga</th>
+                        <th style={{ fontWeight: 500 }}>Baki</th>
+                        <th style={{ fontWeight: 500 }}>Status</th>
+                        <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {senaraiBahan.map((b, idx) => (
+                        <tr key={b.id}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input type="checkbox" className={styles.tableCheckbox} checked={selectedBahan.includes(b.id)} onChange={() => toggleSelectBahan(b.id)} />
+                          </td>
+                          <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                          <td style={{ fontWeight: 500, color: '#f1f5f9' }}>{b.nama_item}</td>
+                          <td>{b.kategori}</td>
+                          <td>RM {Number(b.harga).toFixed(2)}</td>
+                          <td style={{ fontWeight: 500 }}>{b.stok_semasa} unit</td>
+                          <td>{b.stok_semasa <= b.tahap_amaran ? <span className={styles.badgeLow}>Rendah</span> : <span className={styles.badgeOk}>Cukup</span>}</td>
+                          <td>
+                            <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                              <button onClick={() => { setItemDiedit(b); setFormNama(b.nama_item); setFormKategori(b.kategori); setFormHarga(String(b.harga)); setFormStokAwal(String(b.stok_semasa)); setFormTahapAmaran(String(b.tahap_amaran)); }} className={styles.btnEdit}>
+                                <Edit size={12} /> Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            )}
+
+            {subTabInventori === 'masuk' && (
+              <div>
+                <div className={styles.cardPanel}>
+                  <h2 className={styles.panelTitle} style={{ fontWeight: 600 }}>Kemasukan Stok Masuk</h2>
+                  <form onSubmit={masukkanStok} className={styles.stockFormGrid}>
+                    <select className={styles.selectField} value={bahanPilihanId} onChange={(e) => setBahanPilihanId(e.target.value)}>
+                      {senaraiBahan.map(b => <option key={b.id} value={b.id}>{b.nama_item} (Baki: {b.stok_semasa})</option>)}
+                    </select>
+                    <input type="number" placeholder="Kuantiti" className={styles.inputField} value={kuantitiTambah} onChange={(e) => setKuantitiTambah(e.target.value)} />
+                    <input type="text" placeholder="Catatan Pembekal" className={styles.inputField} value={catatanStok} onChange={(e) => setCatatanStok(e.target.value)} />
+                    <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><PlusCircle size={14} /> Tambah</button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {subTabInventori === 'keluar' && (
+              <div className={styles.cardPanel}>
+                <h2 className={styles.panelTitle} style={{ fontWeight: 600 }}>Rekod Stok Keluar (Jualan Kaunter)</h2>
+                <div className={styles.tableWrapper}>
+                  <table className={styles.table} style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                        <th style={{ fontWeight: 500 }}>Tarikh & Masa</th>
+                        <th style={{ fontWeight: 500 }}>Item</th>
+                        <th style={{ fontWeight: 500 }}>Kuantiti Keluar</th>
+                        <th style={{ fontWeight: 500 }}>Baki Tinggal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {senaraiLog.filter(l => l.jenis_pergerakan === 'keluar').map((l, idx) => (
+                        <tr key={l.id}>
+                          <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                          <td>{new Date(l.created_at).toLocaleString('ms-MY')}</td>
+                          <td style={{ fontWeight: 500 }}>{l.bahan_penawar?.nama_item}</td>
+                          <td style={{ color: '#f87171', fontWeight: 500 }}>-{l.kuantiti}</td>
+                          <td>{l.baki_selepas} unit</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
+        )}
 
-          <div className={styles.cardPanel}>
-            <h2 className={styles.panelTitle}>Rekod Transaksi Masuk Hari Ini</h2>
+        {/* ===================== TAB 3: DIREKTORI & SEJARAH PESAKIT ===================== */}
+        {tabAktif === 'pesakit' && isPesakit && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Direktori Pesakit & Rekod Rawatan</h2></div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {selectedPesakit.length > 0 && (
+                  <button onClick={padamPesakitPukal} disabled={memproses} className={styles.btnBulkDelete}>
+                    <Trash2 size={13} /> Padam Terpilih ({selectedPesakit.length})
+                  </button>
+                )}
+                <input type="text" placeholder="Cari nama, No. IC, atau No. Tel..." className={styles.searchBar} value={carianPesakit} onChange={(e) => setCarianPesakit(e.target.value)} />
+              </div>
+            </div>
+
             <div className={styles.tableWrapper}>
-              <table className={styles.table}>
+              <table className={styles.table} style={{ width: '100%' }}>
                 <thead>
                   <tr>
-                    <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                    <th>No. Resit</th>
-                    <th>Hari / Tarikh</th>
-                    <th>Masa</th>
-                    <th>Pesakit</th>
-                    <th>Kaedah</th>
-                    <th style={{ textAlign: 'right' }}>Jumlah (RM)</th>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input type="checkbox" className={styles.tableCheckbox} checked={senaraiPesakitDitapis.length > 0 && selectedPesakit.length === senaraiPesakitDitapis.length} onChange={toggleSelectAllPesakit} />
+                    </th>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Nama Pesakit</th>
+                    <th style={{ fontWeight: 500 }}>No. Kad Pengenalan</th>
+                    <th style={{ fontWeight: 500 }}>No. Telefon</th>
+                    <th style={{ fontWeight: 500 }}>Alamat Kediaman</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {senaraiTransaksi.length === 0 ? (
+                  {senaraiPesakitDitapis.map((p, idx) => (
+                    <tr key={p.id}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input type="checkbox" className={styles.tableCheckbox} checked={selectedPesakit.includes(p.id)} onChange={() => toggleSelectPesakit(p.id)} />
+                      </td>
+                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                      <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{p.nama}</td>
+                      <td>{p.no_ic}</td>
+                      <td>{p.no_telefon}</td>
+                      <td>{p.alamat || <span style={{ color: '#64748b' }}>Belum diisi</span>}</td>
+                      <td>{new Date(p.created_at).toLocaleDateString('ms-MY')}</td>
+                      <td>
+                        <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                          <button onClick={() => setPesakitDiedit(p)} className={styles.btnEdit}><Edit size={12} /> Edit</button>
+                          <button onClick={() => bukaGarisMasaPesakit(p)} className={styles.btnHistory}><History size={12} /> Sejarah</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 4: PORTFOLIO PERAWAT ===================== */}
+        {tabAktif === 'perawat' && isSuper && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Portfolio & Tauliah Perawat</h2></div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {selectedPerawat.length > 0 && (
+                  <button onClick={padamPerawatPukal} disabled={memproses} className={styles.btnBulkDelete}>
+                    <Trash2 size={13} /> Padam Terpilih ({selectedPerawat.length})
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setPerawatDiedit({
+                      id: '',
+                      nama: '',
+                      no_bilik: '-',
+                      no_ic: '',
+                      no_telefon: '',
+                      kelayakan: '',
+                      bidang_khusus: '',
+                      status_aktif: true
+                    });
+                    setBukaModalPerawat(true);
+                  }}
+                  className={styles.btnAction}
+                  style={{ fontWeight: 500 }}
+                >
+                  <PlusCircle size={14} /> Lantik Perawat Baharu
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.tableWrapper}>
+              <table className={styles.table} style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input type="checkbox" className={styles.tableCheckbox} checked={senaraiPerawat.length > 0 && selectedPerawat.length === senaraiPerawat.length} onChange={toggleSelectAllPerawat} />
+                    </th>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Nama Perawat</th>
+                    <th style={{ fontWeight: 500 }}>No. Telefon</th>
+                    <th style={{ fontWeight: 500 }}>Kelayakan / Tauliah</th>
+                    <th style={{ fontWeight: 500 }}>Bidang Tumpuan Ruqyah</th>
+                    <th style={{ fontWeight: 500 }}>Status</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {senaraiPerawat.map((u, idx) => (
+                    <tr key={u.id}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input type="checkbox" className={styles.tableCheckbox} checked={selectedPerawat.includes(u.id)} onChange={() => toggleSelectPerawat(u.id)} />
+                      </td>
+                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                      <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{u.nama}</td>
+                      <td>{u.no_telefon || '-'}</td>
+                      <td>{u.kelayakan || 'Perawat Bertauliah Darul Syifa'}</td>
+                      <td>{u.bidang_khusus || 'Ruqyah Syar’iyyah Am'}</td>
+                      <td>{u.status_aktif ? <span className={styles.badgeOk}>Aktif</span> : <span className={styles.badgeLow}>Bercuti</span>}</td>
+                      <td>
+                        <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                          <button onClick={() => { setPerawatDiedit(u); setBukaModalPerawat(true); }} className={styles.btnEdit}>
+                            <Edit size={12} /> Edit
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 5: KAWALAN BILIK RAWATAN ===================== */}
+        {tabAktif === 'bilik' && isSuper && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div>
+                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Kawalan Bilik Rawatan Fizikal</h2>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Pantau perawat yang sedang *check-in* di setiap bilik dan lepaskan bilik jika berlaku kekeliruan syif
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {selectedBilik.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={padamBilikPukal}
+                    disabled={memproses}
+                    className={styles.btnBulkDelete}
+                  >
+                    <Trash2 size={13} /> Padam Terpilih ({selectedBilik.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBilikDiedit(null);
+                    setFormNamaBilik('');
+                    setBukaModalBilik(true);
+                  }}
+                  className={styles.btnAction}
+                  style={{ fontWeight: 500 }}
+                >
+                  <PlusCircle size={14} /> Tambah Bilik Rawatan
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.tableWrapper}>
+              <table className={styles.table} style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        className={styles.tableCheckbox}
+                        checked={senaraiBilik.length > 0 && selectedBilik.length === senaraiBilik.length}
+                        onChange={toggleSelectAllBilik}
+                      />
+                    </th>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Nama Bilik</th>
+                    <th style={{ fontWeight: 500 }}>Tabib Bertugas Semasa</th>
+                    <th style={{ fontWeight: 500 }}>Sesi</th>
+                    <th style={{ fontWeight: 500 }}>Status Penggunaan</th>
+                    <th style={{ fontWeight: 500 }}>Operasi Bilik</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {senaraiBilik.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                        Belum ada transaksi direkodkan untuk hari ini.
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                        Tiada bilik rawatan didaftarkan.
                       </td>
                     </tr>
                   ) : (
-                    senaraiTransaksi.map((trx, idx) => (
-                      <tr key={trx.id}>
+                    senaraiBilik.map((b, idx) => (
+                      <tr
+                        key={b.id}
+                        style={{ backgroundColor: selectedBilik.includes(b.id) ? 'rgba(2, 132, 199, 0.1)' : undefined }}
+                      >
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            className={styles.tableCheckbox}
+                            checked={selectedBilik.includes(b.id)}
+                            onChange={() => toggleSelectBilik(b.id)}
+                          />
+                        </td>
                         <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                        <td style={{ color: '#38bdf8' }}>{trx.no_resit}</td>
-                        <td>{new Date(trx.created_at).toLocaleDateString('ms-MY')}</td>
-                        <td>{new Date(trx.created_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td>{trx.pesakit?.nama || 'Pesakit Am'}</td>
-                        <td><span className={`${styles.badgeMethod} ${trx.kaedah_bayaran === 'tunai' ? styles.methodCash : styles.methodQR}`}>{trx.kaedah_bayaran === 'tunai' ? 'Tunai' : 'DuitNow QR'}</span></td>
-                        <td style={{ textAlign: 'right', color: '#34d399' }}>+RM {Number(trx.jumlah).toFixed(2)}</td>
+                        <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{b.nama_bilik}</td>
+                        <td>
+                          {b.perawat?.nama ? (
+                            <span style={{ color: '#38bdf8', fontWeight: 500 }}>{b.perawat.nama}</span>
+                          ) : (
+                            <span style={{ color: '#64748b', fontStyle: 'italic' }}>Kosong (Tiada Perawat)</span>
+                          )}
+                        </td>
+                        <td style={{ textTransform: 'capitalize' }}>{b.sesi || '-'}</td>
+                        <td>
+                          {b.perawat_semasa_id ? (
+                            <span className={styles.badgeLow}>Digunakan</span>
+                          ) : (
+                            <span className={styles.badgeOk}>Tersedia</span>
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => toggleStatusAktifBilik(b)}
+                            style={{
+                              backgroundColor: b.status_aktif ? '#065f46' : '#7f1d1d',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '0.35rem',
+                              padding: '0.25rem 0.6rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {b.status_aktif ? 'Buka (Aktif)' : 'Tutup Bilik'}
+                          </button>
+                        </td>
+                        <td>
+                          <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBilikDiedit(b);
+                                setFormNamaBilik(b.nama_bilik);
+                                setBukaModalBilik(true);
+                              }}
+                              className={styles.btnEdit}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
+                              <Edit size={12} /> Edit
+                            </button>
+                            {b.perawat_semasa_id && (
+                              <button
+                                type="button"
+                                onClick={() => kosongkanBilik(b.id)}
+                                className={styles.btnBulkDelete}
+                                style={{ padding: '0.35rem 0.65rem' }}
+                                title="Lepaskan perawat daripada bilik ini"
+                              >
+                                Kosongkan Bilik
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={memproses}
+                              onClick={() => tanganiPadamSatuBilik(b.id)}
+                              className={styles.btnBulkDelete}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
+                              <Trash2 size={12} /> Padam
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -1125,731 +2027,453 @@ export default function PapanPemukaAdmin() {
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ===================== TAB 2: INVENTORI & STOK ===================== */}
-      {tabAktif === 'inventori' && isKewangan && (
-        <div>
-          <div className={styles.subTabBar}>
-            <button onClick={() => setSubTabInventori('baki')} className={`${styles.subTabBtn} ${subTabInventori === 'baki' ? styles.subTabBtnActive : ''}`}>Katalog Item</button>
-            <button onClick={() => setSubTabInventori('masuk')} className={`${styles.subTabBtn} ${subTabInventori === 'masuk' ? styles.subTabMasukActive : ''}`}>Stok Masuk</button>
-            <button onClick={() => setSubTabInventori('keluar')} className={`${styles.subTabBtn} ${subTabInventori === 'keluar' ? styles.subTabKeluarActive : ''}`}>Stok Keluar</button>
-          </div>
-
-          {subTabInventori === 'baki' && (
-            <div className={styles.cardPanel}>
-              <div className={styles.tableHeaderActionRow}>
-                <div><h2 className={styles.panelTitle} style={{ margin: 0 }}>Katalog Inventori & Stok Semasa</h2></div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {selectedBahan.length > 0 && (
-                    <button onClick={padamBahanPukal} disabled={memproses} className={styles.btnBulkDelete}>
-                      <Trash2 size={15} /> Padam Terpilih ({selectedBahan.length})
-                    </button>
-                  )}
-                  <button onClick={() => setBukaModalTambahBahan(true)} className={styles.btnAction}>
-                    <PlusCircle size={16} /> Daftar Item
-                  </button>
-                </div>
+        {/* ===================== TAB 6: PENGURUSAN REAKSI RUQYAH ===================== */}
+        {tabAktif === 'reaksi' && isSuper && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div>
+                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Senarai Reaksi Ruqyah</h2>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Tambah, kemaskini atau nyahaktifkan tag simptom reaksi ruqyah yang terpapar di konsol perawat
+                </p>
               </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {selectedReaksi.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={padamReaksiPukal}
+                    disabled={memproses}
+                    className={styles.btnBulkDelete}
+                  >
+                    <Trash2 size={13} /> Padam Terpilih ({selectedReaksi.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReaksiDiedit(null);
+                    setFormNamaReaksi('');
+                    setFormKeteranganReaksi('');
+                    setBukaModalReaksi(true);
+                  }}
+                  className={styles.btnAction}
+                  style={{ fontWeight: 500 }}
+                >
+                  <PlusCircle size={14} /> Tambah Reaksi Baharu
+                </button>
+              </div>
+            </div>
 
-              <div className={styles.tableWrapper}>
-                <table className={styles.table}>
-                  <thead>
+            <div className={styles.tableWrapper}>
+              <table className={styles.table} style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        className={styles.tableCheckbox}
+                        checked={senaraiReaksi.length > 0 && selectedReaksi.length === senaraiReaksi.length}
+                        onChange={toggleSelectAllReaksi}
+                      />
+                    </th>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Nama Reaksi / Simptom</th>
+                    <th style={{ fontWeight: 500 }}>Penerangan Klinikal (Pilihan)</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Status</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {senaraiReaksi.length === 0 ? (
                     <tr>
-                      <th style={{ width: '40px', textAlign: 'center' }}>
-                        <input type="checkbox" className={styles.tableCheckbox} checked={senaraiBahan.length > 0 && selectedBahan.length === senaraiBahan.length} onChange={toggleSelectAllBahan} />
-                      </th>
-                      <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                      <th>Nama Item</th>
-                      <th>Kategori</th>
-                      <th>Harga</th>
-                      <th>Baki</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: 'center' }}>Tindakan</th>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                        Tiada reaksi ruqyah didaftarkan.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {senaraiBahan.map((b, idx) => (
-                      <tr key={b.id}>
+                  ) : (
+                    senaraiReaksi.map((r, idx) => (
+                      <tr key={r.id}>
                         <td style={{ textAlign: 'center' }}>
-                          <input type="checkbox" className={styles.tableCheckbox} checked={selectedBahan.includes(b.id)} onChange={() => toggleSelectBahan(b.id)} />
+                          <input
+                            type="checkbox"
+                            className={styles.tableCheckbox}
+                            checked={selectedReaksi.includes(r.id)}
+                            onChange={() => toggleSelectReaksi(r.id)}
+                          />
                         </td>
                         <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                        <td>{b.nama_item}</td>
-                        <td>{b.kategori}</td>
-                        <td>RM {Number(b.harga).toFixed(2)}</td>
-                        <td>{b.stok_semasa} unit</td>
-                        <td>{b.stok_semasa <= b.tahap_amaran ? <span className={styles.badgeLow}>Rendah</span> : <span className={styles.badgeOk}>Cukup</span>}</td>
+                        <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{r.nama_reaksi}</td>
+                        <td style={{ color: '#94a3b8' }}>{r.keterangan || '-'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleStatusReaksi(r)}
+                            style={{
+                              backgroundColor: r.status_aktif ? '#065f46' : '#7f1d1d',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '0.35rem',
+                              padding: '0.25rem 0.6rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {r.status_aktif ? 'Aktif' : 'Nyahaktif'}
+                          </button>
+                        </td>
                         <td>
                           <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                            <button onClick={() => { setItemDiedit(b); setFormNama(b.nama_item); setFormKategori(b.kategori); setFormHarga(String(b.harga)); setFormStokAwal(String(b.stok_semasa)); setFormTahapAmaran(String(b.tahap_amaran)); }} className={styles.btnEdit}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReaksiDiedit(r);
+                                setFormNamaReaksi(r.nama_reaksi);
+                                setFormKeteranganReaksi(r.keterangan || '');
+                                setBukaModalReaksi(true);
+                              }}
+                              className={styles.btnEdit}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
                               <Edit size={12} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={memproses}
+                              onClick={() => tanganiPadamSatuReaksi(r.id)}
+                              className={styles.btnBulkDelete}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
+                              <Trash2 size={12} /> Padam
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB 7: SIARAN VIDEO TV ===================== */}
+        {tabAktif === 'video' && isSuper && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div>
+                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Siaran Video Skrin TV</h2>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Tetapkan pautan YouTube atau fail MP4 untuk dimainkan di kotak dewan menunggu
+                </p>
               </div>
-            </div>
-          )}
-
-          {subTabInventori === 'masuk' && (
-            <div>
-              <div className={styles.cardPanel}>
-                <h2 className={styles.panelTitle}>Kemasukan Stok Masuk</h2>
-                <form onSubmit={masukkanStok} className={styles.stockFormGrid}>
-                  <select className={styles.selectField} value={bahanPilihanId} onChange={(e) => setBahanPilihanId(e.target.value)}>
-                    {senaraiBahan.map(b => <option key={b.id} value={b.id}>{b.nama_item} (Baki: {b.stok_semasa})</option>)}
-                  </select>
-                  <input type="number" placeholder="Kuantiti" className={styles.inputField} value={kuantitiTambah} onChange={(e) => setKuantitiTambah(e.target.value)} />
-                  <input type="text" placeholder="Catatan Pembekal" className={styles.inputField} value={catatanStok} onChange={(e) => setCatatanStok(e.target.value)} />
-                  <button type="submit" disabled={memproses} className={styles.btnAction}><PlusCircle size={16} /> Tambah</button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {subTabInventori === 'keluar' && (
-            <div className={styles.cardPanel}>
-              <h2 className={styles.panelTitle}>Rekod Stok Keluar (Jualan Kaunter)</h2>
-              <div className={styles.tableWrapper}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                      <th>Tarikh & Masa</th>
-                      <th>Item</th>
-                      <th>Kuantiti Keluar</th>
-                      <th>Baki Tinggal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {senaraiLog.filter(l => l.jenis_pergerakan === 'keluar').map((l, idx) => (
-                      <tr key={l.id}>
-                        <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                        <td>{new Date(l.created_at).toLocaleString('ms-MY')}</td>
-                        <td>{l.bahan_penawar?.nama_item}</td>
-                        <td style={{ color: '#f87171' }}>-{l.kuantiti}</td>
-                        <td>{l.baki_selepas} unit</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ===================== TAB 3: DIREKTORI & SEJARAH PESAKIT ===================== */}
-      {tabAktif === 'pesakit' && isPesakit && (
-        <div className={styles.cardPanel}>
-          <div className={styles.tableHeaderActionRow}>
-            <div><h2 className={styles.panelTitle} style={{ margin: 0 }}>Direktori Pesakit & Rekod Rawatan</h2></div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {selectedPesakit.length > 0 && (
-                <button onClick={padamPesakitPukal} disabled={memproses} className={styles.btnBulkDelete}>
-                  <Trash2 size={15} /> Padam Terpilih ({selectedPesakit.length})
-                </button>
-              )}
-              <input type="text" placeholder="Cari nama, No. IC, atau No. Tel..." className={styles.searchBar} value={carianPesakit} onChange={(e) => setCarianPesakit(e.target.value)} />
-            </div>
-          </div>
-
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>
-                    <input type="checkbox" className={styles.tableCheckbox} checked={senaraiPesakitDitapis.length > 0 && selectedPesakit.length === senaraiPesakitDitapis.length} onChange={toggleSelectAllPesakit} />
-                  </th>
-                  <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                  <th>Nama Pesakit</th>
-                  <th>No. Kad Pengenalan</th>
-                  <th>No. Telefon</th>
-                  <th>Alamat Kediaman</th>
-                  <th style={{ textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {senaraiPesakitDitapis.map((p, idx) => (
-                  <tr key={p.id}>
-                    <td style={{ textAlign: 'center' }}>
-                      <input type="checkbox" className={styles.tableCheckbox} checked={selectedPesakit.includes(p.id)} onChange={() => toggleSelectPesakit(p.id)} />
-                    </td>
-                    <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                    <td style={{ color: '#f1f5f9' }}>{p.nama}</td>
-                    <td>{p.no_ic}</td>
-                    <td>{p.no_telefon}</td>
-                    <td>{p.alamat || <span style={{ color: '#64748b' }}>Belum diisi</span>}</td>
-                    <td>{new Date(p.created_at).toLocaleDateString('ms-MY')}</td>
-                    <td>
-                      <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                        <button onClick={() => setPesakitDiedit(p)} className={styles.btnEdit}><Edit size={12} /> Edit</button>
-                        <button onClick={() => bukaGarisMasaPesakit(p)} className={styles.btnHistory}><History size={12} /> Sejarah</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ===================== TAB 4: PORTFOLIO PERAWAT ===================== */}
-      {tabAktif === 'perawat' && isSuper && (
-        <div className={styles.cardPanel}>
-          <div className={styles.tableHeaderActionRow}>
-            <div><h2 className={styles.panelTitle} style={{ margin: 0 }}>Pengurusan Portfolio & Tauliah Perawat</h2></div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {selectedPerawat.length > 0 && (
-                <button onClick={padamPerawatPukal} disabled={memproses} className={styles.btnBulkDelete}>
-                  <Trash2 size={15} /> Padam Terpilih ({selectedPerawat.length})
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setPerawatDiedit({
-                    id: '',
-                    nama: '',
-                    no_bilik: '-',
-                    no_ic: '',
-                    no_telefon: '',
-                    kelayakan: '',
-                    bidang_khusus: '',
-                    status_aktif: true
-                  });
-                  setBukaModalPerawat(true);
-                }}
-                className={styles.btnAction}
-              >
-                <PlusCircle size={16} /> Lantik Perawat Baharu
-              </button>
-            </div>
-          </div>
-
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>
-                    <input type="checkbox" className={styles.tableCheckbox} checked={senaraiPerawat.length > 0 && selectedPerawat.length === senaraiPerawat.length} onChange={toggleSelectAllPerawat} />
-                  </th>
-                  <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                  <th>Nama Perawat</th>
-                  <th>No. Telefon</th>
-                  <th>Kelayakan / Tauliah</th>
-                  <th>Bidang Tumpuan Ruqyah</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {senaraiPerawat.map((u, idx) => (
-                  <tr key={u.id}>
-                    <td style={{ textAlign: 'center' }}>
-                      <input type="checkbox" className={styles.tableCheckbox} checked={selectedPerawat.includes(u.id)} onChange={() => toggleSelectPerawat(u.id)} />
-                    </td>
-                    <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                    <td style={{ color: '#f1f5f9' }}>{u.nama}</td>
-                    <td>{u.no_telefon || '-'}</td>
-                    <td>{u.kelayakan || 'Perawat Bertauliah Darul Syifa'}</td>
-                    <td>{u.bidang_khusus || 'Ruqyah Syar’iyyah Am'}</td>
-                    <td>{u.status_aktif ? <span className={styles.badgeOk}>Aktif</span> : <span className={styles.badgeLow}>Bercuti</span>}</td>
-                    <td>
-                      <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                        <button onClick={() => { setPerawatDiedit(u); setBukaModalPerawat(true); }} className={styles.btnEdit}>
-                          <Edit size={12} /> Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          TAB 5: KAWALAN BILIK RAWATAN (SELECT ALL, EDIT & PADAM KALIS SEKATAN)
-         ======================================================== */}
-      {tabAktif === 'bilik' && isSuper && (
-        <div className={styles.cardPanel}>
-          <div className={styles.tableHeaderActionRow}>
-            <div>
-              <h2 className={styles.panelTitle} style={{ margin: 0 }}>Kawalan Bilik Rawatan Fizikal</h2>
-              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-                Pantau perawat yang sedang *check-in* di setiap bilik dan lepaskan bilik jika berlaku kekeliruan syif
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {selectedBilik.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {selectedVideo.length > 0 && (
+                  <button type="button" onClick={padamVideoPukal} disabled={memproses} className={styles.btnBulkDelete}>
+                    <Trash2 size={13} /> Padam Terpilih ({selectedVideo.length})
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={padamBilikPukal}
-                  disabled={memproses}
-                  className={styles.btnBulkDelete}
+                  onClick={() => {
+                    setVideoDiedit(null);
+                    setFormTajukVideo('');
+                    setFormUrlVideo('');
+                    setFormJenisVideo('youtube');
+                    setFormLoopVideo(false);
+                    setFormKelantangan(20);
+                    setBukaModalVideo(true);
+                  }}
+                  className={styles.btnAction}
+                  style={{ fontWeight: 500 }}
                 >
-                  <Trash2 size={15} /> Padam Terpilih ({selectedBilik.length})
+                  <PlusCircle size={14} /> Tambah Video TV
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setBilikDiedit(null);
-                  setFormNamaBilik('');
-                  setBukaModalBilik(true);
-                }}
-                className={styles.btnAction}
-              >
-                <PlusCircle size={16} /> Tambah Bilik Rawatan
-              </button>
+              </div>
             </div>
-          </div>
 
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      className={styles.tableCheckbox}
-                      checked={senaraiBilik.length > 0 && selectedBilik.length === senaraiBilik.length}
-                      onChange={toggleSelectAllBilik}
-                      title="Pilih Semua Bilik"
-                    />
-                  </th>
-                  <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                  <th>Nama Bilik</th>
-                  <th>Tabib Bertugas Semasa</th>
-                  <th>Sesi</th>
-                  <th>Status Penggunaan</th>
-                  <th>Operasi Bilik</th>
-                  <th style={{ textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {senaraiBilik.length === 0 ? (
+            <div className={styles.tableWrapper}>
+              <table className={styles.table} style={{ width: '100%' }}>
+                <thead>
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                      Tiada bilik rawatan didaftarkan.
-                    </td>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        className={styles.tableCheckbox}
+                        checked={senaraiVideo.length > 0 && selectedVideo.length === senaraiVideo.length}
+                        onChange={toggleSelectAllVideo}
+                      />
+                    </th>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Tajuk Video</th>
+                    <th style={{ fontWeight: 500 }}>Jenis Media</th>
+                    <th style={{ fontWeight: 500 }}>Pautan / URL</th>
+                    <th style={{ fontWeight: 500 }}>Mod Mainan</th>
+                    <th style={{ fontWeight: 500 }}>Kelantangan Audio</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
                   </tr>
-                ) : (
-                  senaraiBilik.map((b, idx) => (
-                    <tr
-                      key={b.id}
-                      style={{ backgroundColor: selectedBilik.includes(b.id) ? 'rgba(2, 132, 199, 0.1)' : undefined }}
-                    >
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          className={styles.tableCheckbox}
-                          checked={selectedBilik.includes(b.id)}
-                          onChange={() => toggleSelectBilik(b.id)}
-                        />
+                </thead>
+                <tbody>
+                  {senaraiVideo.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                        Belum ada video siaran TV didaftarkan.
                       </td>
-                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                      <td style={{ color: '#f1f5f9', fontWeight: 700 }}>{b.nama_bilik}</td>
-                      <td>
-                        {b.perawat?.nama ? (
-                          <span style={{ color: '#38bdf8', fontWeight: 600 }}>{b.perawat.nama}</span>
-                        ) : (
-                          <span style={{ color: '#64748b', fontStyle: 'italic' }}>Kosong (Tiada Perawat)</span>
-                        )}
-                      </td>
-                      <td style={{ textTransform: 'capitalize' }}>{b.sesi || '-'}</td>
-                      <td>
-                        {b.perawat_semasa_id ? (
-                          <span className={styles.badgeLow}>Digunakan</span>
-                        ) : (
-                          <span className={styles.badgeOk}>Tersedia</span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => toggleStatusAktifBilik(b)}
-                          style={{
-                            backgroundColor: b.status_aktif ? '#065f46' : '#7f1d1d',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '0.35rem',
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {b.status_aktif ? 'Buka (Aktif)' : 'Tutup Bilik'}
-                        </button>
-                      </td>
-                      <td>
-                        <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBilikDiedit(b);
-                              setFormNamaBilik(b.nama_bilik);
-                              setBukaModalBilik(true);
-                            }}
-                            className={styles.btnEdit}
-                            style={{ padding: '0.35rem 0.65rem' }}
-                          >
-                            <Edit size={13} /> Edit
-                          </button>
-                          {b.perawat_semasa_id && (
+                    </tr>
+                  ) : (
+                    senaraiVideo.map((v, idx) => (
+                      <tr key={v.id}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            className={styles.tableCheckbox}
+                            checked={selectedVideo.includes(v.id)}
+                            onChange={() => toggleSelectVideo(v.id)}
+                          />
+                        </td>
+                        <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                        <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{v.tajuk}</td>
+                        <td>
+                          <span className={styles.badgeMethod} style={{ backgroundColor: v.jenis === 'youtube' ? '#dc2626' : '#0284c7', color: '#fff' }}>
+                            {v.jenis.toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#38bdf8', fontSize: '0.8rem' }}>
+                          {v.url_video}
+                        </td>
+                        <td>
+                          {v.loop_tunggal ? (
+                            <span style={{ color: '#fbbf24', fontWeight: 500 }}>🔄 Berulang (Loop)</span>
+                          ) : (
+                            <span style={{ color: '#94a3b8' }}>🔀 Main Rawak</span>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 500, color: v.kelantangan_audio === 0 ? '#64748b' : v.kelantangan_audio <= 30 ? '#34d399' : '#f59e0b' }}>
+                            {v.kelantangan_audio === 0 ? 'Bisu (0%)' : `${v.kelantangan_audio}%`}
+                          </span>
+                        </td>
+                        <td>
+                          <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
                             <button
                               type="button"
-                              onClick={() => kosongkanBilik(b.id)}
+                              onClick={() => {
+                                setVideoDiedit(v);
+                                setFormTajukVideo(v.tajuk);
+                                setFormUrlVideo(v.url_video);
+                                setFormJenisVideo(v.jenis);
+                                setFormLoopVideo(v.loop_tunggal);
+                                setFormKelantangan(v.kelantangan_audio);
+                                setBukaModalVideo(true);
+                              }}
+                              className={styles.btnEdit}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
+                              <Edit size={12} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={memproses}
+                              onClick={() => tanganiPadamSatuVideo(v.id)}
                               className={styles.btnBulkDelete}
                               style={{ padding: '0.35rem 0.65rem' }}
-                              title="Lepaskan perawat daripada bilik ini"
                             >
-                              Kosongkan Bilik
+                              <Trash2 size={12} /> Padam
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            disabled={memproses}
-                            onClick={() => tanganiPadamSatuBilik(b.id)}
-                            className={styles.btnBulkDelete}
-                            style={{ padding: '0.35rem 0.65rem' }}
-                          >
-                            <Trash2 size={13} /> Padam
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          TAB 6: SIARAN VIDEO TV
-         ======================================================== */}
-      {tabAktif === 'video' && isSuper && (
-        <div className={styles.cardPanel}>
-          <div className={styles.tableHeaderActionRow}>
-            <div>
-              <h2 className={styles.panelTitle} style={{ margin: 0 }}>Pengurusan Siaran Video Skrin TV</h2>
-              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-                Tetapkan pautan YouTube atau fail MP4 untuk dimainkan di kotak dewan menunggu
-              </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {selectedVideo.length > 0 && (
-                <button type="button" onClick={padamVideoPukal} disabled={memproses} className={styles.btnBulkDelete}>
-                  <Trash2 size={15} /> Padam Terpilih ({selectedVideo.length})
-                </button>
-              )}
+          </div>
+        )}
+
+        {/* ===================== TAB 8: SIARAN TICKER TV ===================== */}
+        {tabAktif === 'ticker' && isSuper && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div>
+                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Siaran Ticker (Teks Bergerak TV)</h2>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Urus ayat al-Quran, hadis, kata-kata hikmah, dan makluman penting di bahagian bawah skrin TV
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  setVideoDiedit(null);
-                  setFormTajukVideo('');
-                  setFormUrlVideo('');
-                  setFormJenisVideo('youtube');
-                  setFormLoopVideo(false);
-                  setFormKelantangan(20);
-                  setBukaModalVideo(true);
+                  setTickerDiedit(null);
+                  setFormTeksArab('');
+                  setFormTeksMaksud('');
+                  setFormRujukan('');
+                  setFormKategoriTicker('makluman');
+                  setFormTurutanTicker('1');
+                  setBukaModalTicker(true);
                 }}
                 className={styles.btnAction}
+                style={{ fontWeight: 500 }}
               >
-                <PlusCircle size={16} /> Tambah Video TV
+                <PlusCircle size={14} /> Tambah Mesej Ticker
               </button>
             </div>
-          </div>
 
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      className={styles.tableCheckbox}
-                      checked={senaraiVideo.length > 0 && selectedVideo.length === senaraiVideo.length}
-                      onChange={toggleSelectAllVideo}
-                    />
-                  </th>
-                  <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                  <th>Tajuk Video</th>
-                  <th>Jenis Media</th>
-                  <th>Pautan / URL</th>
-                  <th>Mod Mainan</th>
-                  <th>Kelantangan Audio</th>
-                  <th style={{ textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {senaraiVideo.length === 0 ? (
+            <div className={styles.tableWrapper}>
+              <table className={styles.table} style={{ width: '100%' }}>
+                <thead>
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b' }}>
-                      Belum ada video siaran TV didaftarkan.
-                    </td>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Kategori</th>
+                    <th style={{ fontWeight: 500 }}>Teks Maksud / Pengumuman</th>
+                    <th style={{ fontWeight: 500 }}>Teks Arab (Pilihan)</th>
+                    <th style={{ fontWeight: 500 }}>Rujukan</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Status</th>
+                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
                   </tr>
-                ) : (
-                  senaraiVideo.map((v, idx) => (
-                    <tr key={v.id}>
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          className={styles.tableCheckbox}
-                          checked={selectedVideo.includes(v.id)}
-                          onChange={() => toggleSelectVideo(v.id)}
-                        />
-                      </td>
-                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                      <td style={{ color: '#f1f5f9', fontWeight: 700 }}>{v.tajuk}</td>
-                      <td>
-                        <span className={styles.badgeMethod} style={{ backgroundColor: v.jenis === 'youtube' ? '#dc2626' : '#0284c7', color: '#fff' }}>
-                          {v.jenis.toUpperCase()}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#38bdf8', fontSize: '0.8rem' }}>
-                        {v.url_video}
-                      </td>
-                      <td>
-                        {v.loop_tunggal ? (
-                          <span style={{ color: '#fbbf24', fontWeight: 700 }}>🔄 Berulang (Loop)</span>
-                        ) : (
-                          <span style={{ color: '#94a3b8' }}>🔀 Main Rawak</span>
-                        )}
-                      </td>
-                      <td>
-                        <span style={{ fontWeight: 800, color: v.kelantangan_audio === 0 ? '#64748b' : v.kelantangan_audio <= 30 ? '#34d399' : '#f59e0b' }}>
-                          {v.kelantangan_audio === 0 ? 'Bisu (0%)' : `${v.kelantangan_audio}%`}
-                        </span>
-                      </td>
-                      <td>
-                        <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setVideoDiedit(v);
-                              setFormTajukVideo(v.tajuk);
-                              setFormUrlVideo(v.url_video);
-                              setFormJenisVideo(v.jenis);
-                              setFormLoopVideo(v.loop_tunggal);
-                              setFormKelantangan(v.kelantangan_audio);
-                              setBukaModalVideo(true);
-                            }}
-                            className={styles.btnEdit}
-                            style={{ padding: '0.35rem 0.65rem' }}
-                          >
-                            <Edit size={13} /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={memproses}
-                            onClick={() => tanganiPadamSatuVideo(v.id)}
-                            className={styles.btnBulkDelete}
-                            style={{ padding: '0.35rem 0.65rem' }}
-                          >
-                            <Trash2 size={13} /> Padam
-                          </button>
-                        </div>
+                </thead>
+                <tbody>
+                  {senaraiTicker.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                        Tiada makluman ticker didaftarkan.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          TAB 7: SIARAN TICKER TV
-         ======================================================== */}
-      {tabAktif === 'ticker' && isSuper && (
-        <div className={styles.cardPanel}>
-          <div className={styles.tableHeaderActionRow}>
-            <div>
-              <h2 className={styles.panelTitle} style={{ margin: 0 }}>Pengurusan Siaran Ticker (Teks Bergerak TV)</h2>
-              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-                Urus ayat al-Quran, hadis, kata-kata hikmah, dan makluman penting di bahagian bawah skrin TV
-              </p>
+                  ) : (
+                    senaraiTicker.map((t, idx) => (
+                      <tr key={t.id}>
+                        <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                        <td>
+                          <span className={styles.badgeMethod} style={{
+                            backgroundColor: t.kategori === 'ayat_syifa' ? '#065f46' : t.kategori === 'promosi' ? '#854d0e' : '#0284c7',
+                            color: '#fff',
+                            textTransform: 'uppercase',
+                            fontWeight: 500
+                          }}>
+                            {t.kategori ? t.kategori.replace('_', ' ') : 'MAKLUMAN'}
+                          </span>
+                        </td>
+                        <td style={{ color: '#f1f5f9', fontWeight: 400 }}>{t.teks_maksud}</td>
+                        <td style={{ color: '#38bdf8', direction: 'rtl', fontFamily: 'serif' }}>{t.teks_arab || '-'}</td>
+                        <td>{t.rujukan || '-'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleStatusTicker(t)}
+                            style={{
+                              backgroundColor: t.status_aktif ? '#065f46' : '#7f1d1d',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '0.35rem',
+                              padding: '0.25rem 0.6rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {t.status_aktif ? 'Aktif' : 'Senyap'}
+                          </button>
+                        </td>
+                        <td>
+                          <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTickerDiedit(t);
+                                setFormTeksArab(t.teks_arab || '');
+                                setFormTeksMaksud(t.teks_maksud);
+                                setFormRujukan(t.rujukan || '');
+                                setFormKategoriTicker(t.kategori || 'makluman');
+                                setFormTurutanTicker(String(t.turutan || 1));
+                                setBukaModalTicker(true);
+                              }}
+                              className={styles.btnEdit}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
+                              <Edit size={12} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => padamTicker(t.id)}
+                              className={styles.btnBulkDelete}
+                              style={{ padding: '0.35rem 0.65rem' }}
+                            >
+                              <Trash2 size={12} /> Padam
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setTickerDiedit(null);
-                setFormTeksArab('');
-                setFormTeksMaksud('');
-                setFormRujukan('');
-                setFormKategoriTicker('makluman');
-                setFormTurutanTicker('1');
-                setBukaModalTicker(true);
-              }}
-              className={styles.btnAction}
-            >
-              <PlusCircle size={16} /> Tambah Mesej Ticker
-            </button>
           </div>
+        )}
 
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                  <th>Kategori</th>
-                  <th>Teks Maksud / Pengumuman</th>
-                  <th>Teks Arab (Pilihan)</th>
-                  <th>Rujukan</th>
-                  <th style={{ textAlign: 'center' }}>Status</th>
-                  <th style={{ textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {senaraiTicker.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                      Tiada makluman ticker didaftarkan.
-                    </td>
-                  </tr>
-                ) : (
-                  senaraiTicker.map((t, idx) => (
-                    <tr key={t.id}>
-                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                      <td>
-                        <span className={styles.badgeMethod} style={{
-                          backgroundColor: t.kategori === 'ayat_syifa' ? '#065f46' : t.kategori === 'promosi' ? '#854d0e' : '#0284c7',
-                          color: '#fff',
-                          textTransform: 'uppercase'
-                        }}>
-                          {t.kategori ? t.kategori.replace('_', ' ') : 'MAKLUMAN'}
-                        </span>
-                      </td>
-                      <td style={{ color: '#f1f5f9', fontWeight: 600 }}>{t.teks_maksud}</td>
-                      <td style={{ color: '#38bdf8', direction: 'rtl', fontFamily: 'serif' }}>{t.teks_arab || '-'}</td>
-                      <td>{t.rujukan || '-'}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => toggleStatusTicker(t)}
-                          style={{
-                            backgroundColor: t.status_aktif ? '#065f46' : '#7f1d1d',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '0.35rem',
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {t.status_aktif ? 'Aktif' : 'Senyap'}
-                        </button>
-                      </td>
-                      <td>
-                        <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTickerDiedit(t);
-                              setFormTeksArab(t.teks_arab || '');
-                              setFormTeksMaksud(t.teks_maksud);
-                              setFormRujukan(t.rujukan || '');
-                              setFormKategoriTicker(t.kategori || 'makluman');
-                              setFormTurutanTicker(String(t.turutan || 1));
-                              setBukaModalTicker(true);
-                            }}
-                            className={styles.btnEdit}
-                            style={{ padding: '0.35rem 0.65rem' }}
-                          >
-                            <Edit size={13} /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => padamTicker(t.id)}
-                            className={styles.btnBulkDelete}
-                            style={{ padding: '0.35rem 0.65rem' }}
-                          >
-                            <Trash2 size={13} /> Padam
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+        {/* ===================== TAB 9: LANTIKAN PENTADBIR ===================== */}
+        {tabAktif === 'admin' && isSuper && (
+          <div className={styles.cardPanel} style={{ width: '100%' }}>
+            <div className={styles.tableHeaderActionRow}>
+              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan & Lantikan Pentadbir Sistem</h2></div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {selectedAdmin.length > 0 && (
+                  <button onClick={padamAdminPukal} disabled={memproses} className={styles.btnBulkDelete}>
+                    <Trash2 size={13} /> Padam Terpilih ({selectedAdmin.length})
+                  </button>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ===================== TAB 8: LANTIKAN PENTADBIR ===================== */}
-      {tabAktif === 'admin' && isSuper && (
-        <div className={styles.cardPanel}>
-          <div className={styles.tableHeaderActionRow}>
-            <div><h2 className={styles.panelTitle} style={{ margin: 0 }}>Pengurusan & Lantikan Pentadbir Sistem</h2></div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {selectedAdmin.length > 0 && (
-                <button onClick={padamAdminPukal} disabled={memproses} className={styles.btnBulkDelete}>
-                  <Trash2 size={15} /> Padam Terpilih ({selectedAdmin.length})
+                <button onClick={() => setBukaModalAdmin(true)} className={styles.btnAction} style={{ fontWeight: 500 }}>
+                  <PlusCircle size={14} /> Lantik Pentadbir Baharu
                 </button>
-              )}
-              <button onClick={() => setBukaModalAdmin(true)} className={styles.btnAction}>
-                <PlusCircle size={16} /> Lantik Pentadbir Baharu
-              </button>
+              </div>
+            </div>
+
+            <div className={styles.tableWrapper}>
+              <table className={styles.table} style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input type="checkbox" className={styles.tableCheckbox} checked={adminBolehDipadam.length > 0 && selectedAdmin.length === adminBolehDipadam.length} onChange={toggleSelectAllAdmin} />
+                    </th>
+                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                    <th style={{ fontWeight: 500 }}>Nama Pentadbir</th>
+                    <th style={{ fontWeight: 500 }}>E-mel</th>
+                    <th style={{ fontWeight: 500 }}>Peranan Capaian</th>
+                    <th style={{ fontWeight: 500 }}>Tarikh Lantikan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {senaraiSemuaAdmin.map((adm, idx) => {
+                    const sayaSendiri = adm.id === profilAdmin?.id;
+                    return (
+                      <tr key={adm.id}>
+                        <td style={{ textAlign: 'center' }}>
+                          {!sayaSendiri ? (
+                            <input type="checkbox" className={styles.tableCheckbox} checked={selectedAdmin.includes(adm.id)} onChange={() => toggleSelectAdmin(adm.id)} />
+                          ) : (
+                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Saya</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                        <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{adm.nama}</td>
+                        <td>{adm.email}</td>
+                        <td>
+                          <span className={styles.adminRoleBadge} style={{ fontWeight: 500 }}>
+                            {adm.peranan.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td>{new Date(adm.created_at || Date.now()).toLocaleDateString('ms-MY')}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>
-                    <input type="checkbox" className={styles.tableCheckbox} checked={adminBolehDipadam.length > 0 && selectedAdmin.length === adminBolehDipadam.length} onChange={toggleSelectAllAdmin} />
-                  </th>
-                  <th style={{ width: '45px', textAlign: 'center' }}>No.</th>
-                  <th>Nama Pentadbir</th>
-                  <th>E-mel</th>
-                  <th>Peranan Capaian</th>
-                  <th>Tarikh Lantikan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {senaraiSemuaAdmin.map((adm, idx) => {
-                  const sayaSendiri = adm.id === profilAdmin?.id;
-                  return (
-                    <tr key={adm.id}>
-                      <td style={{ textAlign: 'center' }}>
-                        {!sayaSendiri ? (
-                          <input type="checkbox" className={styles.tableCheckbox} checked={selectedAdmin.includes(adm.id)} onChange={() => toggleSelectAdmin(adm.id)} />
-                        ) : (
-                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Saya</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                      <td style={{ color: '#f1f5f9' }}>{adm.nama}</td>
-                      <td>{adm.email}</td>
-                      <td>
-                        <span className={styles.adminRoleBadge}>
-                          {adm.peranan.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td>{new Date(adm.created_at || Date.now()).toLocaleDateString('ms-MY')}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ========================================================
           MODAL-MODAL SISTEM
@@ -1866,25 +2490,25 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={simpanKemaskiniPesakit}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Nama Penuh:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Penuh:</label>
                   <input type="text" required className={styles.inputField} value={pesakitDiedit.nama} onChange={(e) => setPesakitDiedit({ ...pesakitDiedit, nama: e.target.value })} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>No. Kad Pengenalan:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Kad Pengenalan:</label>
                   <input type="text" required className={styles.inputField} value={pesakitDiedit.no_ic} onChange={(e) => setPesakitDiedit({ ...pesakitDiedit, no_ic: e.target.value })} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>No. Telefon:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Telefon:</label>
                   <input type="text" required className={styles.inputField} value={pesakitDiedit.no_telefon} onChange={(e) => setPesakitDiedit({ ...pesakitDiedit, no_telefon: e.target.value })} />
                 </div>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Alamat Kediaman Pesakit:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Alamat Kediaman Pesakit:</label>
                   <textarea rows={3} className={styles.inputField} value={pesakitDiedit.alamat || ''} onChange={(e) => setPesakitDiedit({ ...pesakitDiedit, alamat: e.target.value })} />
                 </div>
               </div>
               <div className={styles.modalActions}>
                 <button type="button" onClick={() => setPesakitDiedit(null)} className={styles.btnCancel}>Batal</button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}><Edit size={16} /> Simpan Maklumat</button>
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><Edit size={14} /> Simpan Maklumat</button>
               </div>
             </form>
           </div>
@@ -1910,7 +2534,7 @@ export default function PapanPemukaAdmin() {
                     <div className={styles.timelineDot}></div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.2rem' }}>
                       <span>{new Date(s.created_at).toLocaleDateString('ms-MY')}</span>
-                      <strong style={{ color: '#38bdf8' }}>{s.perawat?.nama}</strong>
+                      <strong style={{ color: '#38bdf8', fontWeight: 500 }}>{s.perawat?.nama}</strong>
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#f1f5f9' }}>
                       <strong>Dapatan / Reaksi:</strong> {Array.isArray(s.reaksi_rawatan) ? s.reaksi_rawatan.join(', ') : s.dapatan_gangguan}
@@ -1937,19 +2561,19 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={simpanPerawat}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Nama Penuh (Beserta Gelaran):</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Penuh (Beserta Gelaran):</label>
                   <input type="text" required placeholder="cth: Ustaz Dr. Amri Mahmud" className={styles.inputField} value={perawatDiedit.nama} onChange={(e) => setPerawatDiedit({ ...perawatDiedit, nama: e.target.value })} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>No. Bilik Rawatan:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Bilik Rawatan:</label>
                   <input type="text" disabled className={styles.inputField} value="Ditetapkan Semasa Check-In" style={{ opacity: 0.6, cursor: 'not-allowed', backgroundColor: '#0f172a' }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>No. Telefon:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Telefon:</label>
                   <input type="text" placeholder="012-3456789" className={styles.inputField} value={perawatDiedit.no_telefon || ''} onChange={(e) => setPerawatDiedit({ ...perawatDiedit, no_telefon: e.target.value })} />
                 </div>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Kelayakan / Sijil Tauliah:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Kelayakan / Sijil Tauliah:</label>
                   <input
                     type="text"
                     placeholder="cth: Sijil Rawatan Islam Darul Syifa (Kohort 2020)"
@@ -1959,7 +2583,7 @@ export default function PapanPemukaAdmin() {
                   />
                 </div>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Bidang Tumpuan / Kepakaran Ruqyah:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Bidang Tumpuan / Kepakaran Ruqyah:</label>
                   <input
                     type="text"
                     placeholder="cth: Gangguan Sihir Rumah Tangga & Trauma Emosi"
@@ -1971,7 +2595,7 @@ export default function PapanPemukaAdmin() {
               </div>
               <div className={styles.modalActions}>
                 <button type="button" onClick={() => setBukaModalPerawat(false)} className={styles.btnCancel}>Batal</button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}><PlusCircle size={16} /> Simpan Portfolio</button>
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><PlusCircle size={14} /> Simpan Portfolio</button>
               </div>
             </form>
           </div>
@@ -1998,7 +2622,7 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={simpanBilik}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Nama Bilik Fizikal:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Bilik Fizikal:</label>
                   <input
                     type="text"
                     required
@@ -2021,8 +2645,8 @@ export default function PapanPemukaAdmin() {
                 >
                   Batal
                 </button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}>
-                  <PlusCircle size={16} /> {bilikDiedit ? 'Simpan Kemaskini' : 'Simpan Bilik'}
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}>
+                  <PlusCircle size={14} /> {bilikDiedit ? 'Simpan Kemaskini' : 'Simpan Bilik'}
                 </button>
               </div>
             </form>
@@ -2030,7 +2654,71 @@ export default function PapanPemukaAdmin() {
         </div>
       )}
 
-      {/* MODAL 5: TAMBAH / EDIT VIDEO TV */}
+      {/* MODAL 5: TAMBAH / EDIT REAKSI RUQYAH */}
+      {bukaModalReaksi && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent} style={{ maxWidth: '460px' }}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>{reaksiDiedit ? 'Kemaskini Reaksi Ruqyah' : 'Tambah Reaksi Ruqyah Baharu'}</h3>
+              <button 
+                onClick={() => { 
+                  setBukaModalReaksi(false); 
+                  setReaksiDiedit(null); 
+                  setFormNamaReaksi(''); 
+                  setFormKeteranganReaksi(''); 
+                }} 
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={simpanReaksi}>
+              <div className={styles.formGridModal}>
+                <div className={styles.formGroupFull}>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Reaksi / Simptom:</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="cth: Menggigil Sejuk Kaki Tangan"
+                    className={styles.inputField}
+                    value={formNamaReaksi}
+                    onChange={(e) => setFormNamaReaksi(e.target.value)}
+                  />
+                </div>
+                <div className={styles.formGroupFull}>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Penerangan Klinikal Ringkas (Pilihan):</label>
+                  <textarea
+                    rows={2}
+                    placeholder="cth: Pesakit mengalami rasa kebas atau kesejukan melampau pada hujung jari semasa ruqyah dibaca."
+                    className={styles.inputField}
+                    value={formKeteranganReaksi}
+                    onChange={(e) => setFormKeteranganReaksi(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className={styles.modalActions}>
+                <button 
+                  type="button" 
+                  onClick={() => { 
+                    setBukaModalReaksi(false); 
+                    setReaksiDiedit(null); 
+                    setFormNamaReaksi(''); 
+                    setFormKeteranganReaksi(''); 
+                  }} 
+                  className={styles.btnCancel}
+                >
+                  Batal
+                </button>
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}>
+                  <PlusCircle size={14} /> {reaksiDiedit ? 'Simpan Kemaskini' : 'Tambah Reaksi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: TAMBAH / EDIT VIDEO TV */}
       {bukaModalVideo && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent} style={{ maxWidth: '520px' }}>
@@ -2044,7 +2732,7 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={simpanVideo}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Tajuk / Penerangan Video:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Tajuk / Penerangan Video:</label>
                   <input
                     type="text"
                     required
@@ -2056,7 +2744,7 @@ export default function PapanPemukaAdmin() {
                 </div>
 
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Pautan YouTube atau URL Fail MP4:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Pautan YouTube atau URL Fail MP4:</label>
                   <input
                     type="text"
                     required
@@ -2073,7 +2761,7 @@ export default function PapanPemukaAdmin() {
                 </div>
 
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Jenis Media:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Jenis Media:</label>
                   <select
                     className={styles.selectField}
                     value={formJenisVideo}
@@ -2084,10 +2772,10 @@ export default function PapanPemukaAdmin() {
                   </select>
                 </div>
 
-                <div className={styles.formGroupFull} style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '0.65rem', border: '1.5px solid #334155' }}>
+                <div className={styles.formGroupFull} style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '0.65rem', border: '1px solid #334155' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Volume2 size={16} /> Had Kelantangan Audio: {formKelantangan}%
+                    <label style={{ fontSize: '0.82rem', fontWeight: 500, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Volume2 size={15} /> Had Kelantangan Audio: {formKelantangan}%
                     </label>
                   </div>
 
@@ -2110,7 +2798,7 @@ export default function PapanPemukaAdmin() {
                       onChange={(e) => setFormLoopVideo(e.target.checked)}
                       style={{ width: '18px', height: '18px', accentColor: '#0284c7' }}
                     />
-                    <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f1f5f9' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#f1f5f9' }}>
                       Ulang video ini sahaja secara berterusan (Loop)?
                     </span>
                   </label>
@@ -2121,8 +2809,8 @@ export default function PapanPemukaAdmin() {
                 <button type="button" onClick={() => { setBukaModalVideo(false); setVideoDiedit(null); }} className={styles.btnCancel}>
                   Batal
                 </button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}>
-                  <PlusCircle size={16} /> {videoDiedit ? 'Simpan Kemaskini' : 'Tambah Video ke TV'}
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}>
+                  <PlusCircle size={14} /> {videoDiedit ? 'Simpan Kemaskini' : 'Tambah Video ke TV'}
                 </button>
               </div>
             </form>
@@ -2130,7 +2818,7 @@ export default function PapanPemukaAdmin() {
         </div>
       )}
 
-      {/* MODAL 6: TAMBAH / EDIT TICKER TV */}
+      {/* MODAL 7: TAMBAH / EDIT TICKER TV */}
       {bukaModalTicker && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent} style={{ maxWidth: '520px' }}>
@@ -2144,7 +2832,7 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={simpanTicker}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Teks Maksud / Pengumuman:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Teks Maksud / Pengumuman:</label>
                   <textarea
                     rows={2}
                     required
@@ -2156,7 +2844,7 @@ export default function PapanPemukaAdmin() {
                 </div>
 
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Teks Arab (Pilihan):</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Teks Arab (Pilihan):</label>
                   <input
                     type="text"
                     dir="rtl"
@@ -2168,7 +2856,7 @@ export default function PapanPemukaAdmin() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Rujukan (cth: Surah Asy-Syu'ara' : 80):</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Rujukan (cth: Surah Asy-Syu'ara' : 80):</label>
                   <input
                     type="text"
                     placeholder="Surah Asy-Syu'ara' : 80"
@@ -2179,7 +2867,7 @@ export default function PapanPemukaAdmin() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Kategori:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Kategori:</label>
                   <select
                     className={styles.selectField}
                     value={formKategoriTicker}
@@ -2196,8 +2884,8 @@ export default function PapanPemukaAdmin() {
                 <button type="button" onClick={() => { setBukaModalTicker(false); setTickerDiedit(null); }} className={styles.btnCancel}>
                   Batal
                 </button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}>
-                  <PlusCircle size={16} /> {tickerDiedit ? 'Simpan Kemaskini' : 'Tambah Ticker'}
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}>
+                  <PlusCircle size={14} /> {tickerDiedit ? 'Simpan Kemaskini' : 'Tambah Ticker'}
                 </button>
               </div>
             </form>
@@ -2205,7 +2893,7 @@ export default function PapanPemukaAdmin() {
         </div>
       )}
 
-      {/* MODAL 7: LANTIKAN ADMIN */}
+      {/* MODAL 8: LANTIKAN ADMIN */}
       {bukaModalAdmin && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent}>
@@ -2216,28 +2904,28 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={ciptaAdminBaharu}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Nama Pentadbir:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Pentadbir:</label>
                   <input type="text" required className={styles.inputField} value={adminNama} onChange={(e) => setAdminNama(e.target.value)} />
                 </div>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>E-mel Log Masuk:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>E-mel Log Masuk:</label>
                   <input type="email" required className={styles.inputField} value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
                 </div>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Kata Laluan:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Kata Laluan:</label>
                   <input type="password" required className={styles.inputField} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
                 </div>
               </div>
               <div className={styles.modalActions}>
                 <button type="button" onClick={() => setBukaModalAdmin(false)} className={styles.btnCancel}>Batal</button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}><UserCheck size={16} /> Sahkan Lantikan</button>
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><UserCheck size={14} /> Sahkan Lantikan</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL 8: DAFTAR INVENTORI */}
+      {/* MODAL 9: DAFTAR INVENTORI */}
       {bukaModalTambahBahan && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent}>
@@ -2248,21 +2936,21 @@ export default function PapanPemukaAdmin() {
             <form onSubmit={simpanItemBaharu}>
               <div className={styles.formGridModal}>
                 <div className={styles.formGroupFull}>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Nama Item:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Item:</label>
                   <input type="text" required className={styles.inputField} value={formNama} onChange={(e) => setFormNama(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Harga Jualan (RM):</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Harga Jualan (RM):</label>
                   <input type="number" step="0.01" required className={styles.inputField} value={formHarga} onChange={(e) => setFormHarga(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>Baki Stok:</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Baki Stok:</label>
                   <input type="number" className={styles.inputField} value={formStokAwal} onChange={(e) => setFormStokAwal(e.target.value)} />
                 </div>
               </div>
               <div className={styles.modalActions}>
                 <button type="button" onClick={() => setBukaModalTambahBahan(false)} className={styles.btnCancel}>Batal</button>
-                <button type="submit" disabled={memproses} className={styles.btnAction}><PlusCircle size={16} /> Simpan</button>
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><PlusCircle size={14} /> Simpan</button>
               </div>
             </form>
           </div>

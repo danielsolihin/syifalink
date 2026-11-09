@@ -1,476 +1,756 @@
+// app/farmasi/page.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import styles from './farmasi.module.css';
-import { PackageCheck, QrCode, Printer, FileText, Accessibility, Car, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import {
+  Package,
+  CheckCircle,
+  CreditCard,
+  Banknote,
+  RefreshCw,
+  QrCode,
+  Printer
+} from 'lucide-react';
+
+interface ItemPesananFarmasi {
+  id: string;
+  no_giliran: string;
+  pesakit_id: string;
+  perawat_id: string | null;
+  waktu_panggil: string | null;
+  perlu_kerusi_roda?: boolean;
+  pesakit?: {
+    nama: string;
+    no_ic: string;
+    no_telefon: string;
+    alamat?: string;
+  };
+  perawat?: {
+    nama: string;
+    no_bilik: string;
+  };
+  sesi_rawatan?: {
+    id: string;
+    senarai_ubat: {
+      id: string;
+      nama_item: string;
+      harga: number;
+      kuantiti: number;
+    }[];
+    catatan_rawatan?: string;
+    dapatan_gangguan?: string;
+    reaksi_rawatan?: string[];
+    diberi_mc?: boolean;
+    tempoh_mc_hari?: number;
+  };
+}
+
+interface ResitCetak {
+  noResit: string;
+  tarikh: string;
+  masa: string;
+  noGiliran: string;
+  namaPesakit: string;
+  noIc: string;
+  namaPerawat: string;
+  kaedahBayaran: string;
+  senaraiUbat: {
+    nama_item: string;
+    harga: number;
+    kuantiti: number;
+  }[];
+  jumlahBayaran: number;
+  diberiMc: boolean;
+  tempohMc: number;
+}
 
 export default function KaunterFarmasi() {
-  const [pesananList, setPesananList] = useState<any[]>([]);
-  const [pesananBayaran, setPesananBayaran] = useState<any | null>(null);
-  const [resitSelesai, setResitSelesai] = useState<any | null>(null);
-  const [paparanMC, setPaparanMC] = useState<any | null>(null);
+  const [senaraiPesanan, setSenaraiPesanan] = useState<ItemPesananFarmasi[]>([]);
+  const [pesananDipilih, setPesananDipilih] = useState<ItemPesananFarmasi | null>(null);
+  const [kaedahBayaran, setKaedahBayaran] = useState<'tunai' | 'duitnow_qr'>('tunai');
   const [memproses, setMemproses] = useState(false);
+  const [sedangMemuat, setSedangMemuat] = useState(true);
+  const [resitUntukCetak, setResitUntukCetak] = useState<ResitCetak | null>(null);
+  const [bukaModalQr, setBukaModalQr] = useState(false);
 
-  // Senarai Amaran Bantuan Kerusi Roda Masa Nyata
-  const [senaraiWheelchair, setSenaraiWheelchair] = useState<any[]>([]);
+  // 1. Muat Data Pesakit di Kaunter Farmasi
+  const muatDataFarmasi = async () => {
+    try {
+      const { data: dataGiliran, error: errGiliran } = await supabase
+        .from('giliran')
+        .select('*, pesakit(id, nama, no_ic, no_telefon, alamat), perawat(id, nama, no_bilik)')
+        .eq('status', 'farmasi')
+        .order('created_at', { ascending: true });
 
-  // 1. Muat Turun Pesanan Farmasi
-  const muatDataPesanan = async () => {
-    const { data } = await supabase
-      .from('pesanan_ubat')
-      .select(`
-        *,
-        pesakit ( nama, no_ic ),
-        sesi_rawatan (
-          perlu_mc,
-          tempoh_mc_hari,
-          sebab_mc,
-          perawat ( nama, no_bilik )
-        )
-      `)
-      .eq('status_bayaran', 'belum_bayar')
-      .order('created_at', { ascending: false });
+      if (errGiliran) throw errGiliran;
 
-    if (data) setPesananList(data);
-  };
+      if (!dataGiliran || dataGiliran.length === 0) {
+        setSenaraiPesanan([]);
+        setPesananDipilih(null);
+        setSedangMemuat(false);
+        return;
+      }
 
-  // 2. Muat Permintaan Kerusi Roda yang Belum Dibantu
-  const muatPermintaanWheelchair = async () => {
-    const tarikhHariIni = new Date().toISOString().split('T')[0];
-    const { data } = await supabase
-      .from('giliran')
-      .select('*, pesakit(nama, no_telefon, alamat)')
-      .eq('perlu_kerusi_roda', true)
-      .eq('status_kerusi_roda', 'menunggu_bantuan')
-      .gte('created_at', `${tarikhHariIni}T00:00:00`)
-      .order('created_at', { ascending: true });
+      const giliranIds = dataGiliran.map((g) => g.id);
+      const pesakitIds = dataGiliran.map((g) => g.pesakit_id);
 
-    if (data) setSenaraiWheelchair(data);
-  };
+      const { data: dataSesi } = await supabase
+        .from('sesi_rawatan')
+        .select('*')
+        .or(`giliran_id.in.(${giliranIds.join(',')}),pesakit_id.in.(${pesakitIds.join(',')})`)
+        .order('created_at', { ascending: false });
 
-  // 3. Staf Sahkan Kerusi Roda Telah Dihantar ke Kereta
-  const sahkanKerusiRodaDiserahkan = async (giliranId: string) => {
-    await supabase
-      .from('giliran')
-      .update({ status_kerusi_roda: 'selesai_bantu' })
-      .eq('id', giliranId);
+      const gabungan: ItemPesananFarmasi[] = dataGiliran.map((g) => {
+        const sesi = dataSesi?.find(
+          (s) => s.giliran_id === g.id || String(s.pesakit_id) === String(g.pesakit_id)
+        );
 
-    muatPermintaanWheelchair();
+        let parsedUbat = [];
+        if (sesi && sesi.senarai_ubat) {
+          parsedUbat = Array.isArray(sesi.senarai_ubat)
+            ? sesi.senarai_ubat
+            : typeof sesi.senarai_ubat === 'string'
+            ? JSON.parse(sesi.senarai_ubat)
+            : [];
+        }
+
+        return {
+          id: g.id,
+          no_giliran: g.no_giliran,
+          pesakit_id: g.pesakit_id,
+          perawat_id: g.perawat_id,
+          waktu_panggil: g.waktu_panggil,
+          perlu_kerusi_roda: Boolean(g.perlu_kerusi_roda),
+          pesakit: g.pesakit,
+          perawat: g.perawat,
+          sesi_rawatan: sesi
+            ? {
+                ...sesi,
+                senarai_ubat: parsedUbat
+              }
+            : undefined
+        };
+      });
+
+      setSenaraiPesanan(gabungan);
+
+      setPesananDipilih((prev) => {
+        if (!prev) return gabungan[0] || null;
+        const masihAda = gabungan.find((item) => item.id === prev.id);
+        return masihAda || gabungan[0] || null;
+      });
+    } catch (err) {
+      console.error('Ralat muat data farmasi:', err);
+    } finally {
+      setSedangMemuat(false);
+    }
   };
 
   useEffect(() => {
-    muatDataPesanan();
-    muatPermintaanWheelchair();
+    muatDataFarmasi();
+    const pemasa = setInterval(muatDataFarmasi, 3000);
 
     const saluran = supabase
-      .channel('farmasi_wheelchair_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pesanan_ubat' }, () => muatDataPesanan())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'giliran' }, () => muatPermintaanWheelchair())
+      .channel('farmasi_sync_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'giliran' }, () => muatDataFarmasi())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sesi_rawatan' }, () => muatDataFarmasi())
       .subscribe();
 
     return () => {
+      clearInterval(pemasa);
       supabase.removeChannel(saluran);
     };
   }, []);
 
-  const tandakanSiapBungkus = async (id: string) => {
-    await supabase.from('pesanan_ubat').update({ status_bungkusan: 'siap_bungkus' }).eq('id', id);
-    setPesananList(prev => prev.map(item => item.id === id ? { ...item, status_bungkusan: 'siap_bungkus' } : item));
+  // 2. Cetak Automatik Apabila Resit Sedia Ditjana
+  useEffect(() => {
+    if (resitUntukCetak) {
+      const pemasa = setTimeout(() => {
+        window.print();
+      }, 300);
+      return () => clearTimeout(pemasa);
+    }
+  }, [resitUntukCetak]);
+
+  const kiraJumlahBayaran = () => {
+    if (!pesananDipilih || !pesananDipilih.sesi_rawatan) return 0;
+    const ubat = pesananDipilih.sesi_rawatan.senarai_ubat || [];
+    return ubat.reduce((acc, item) => acc + (Number(item.harga) || 0) * (Number(item.kuantiti) || 0), 0);
   };
 
-  const selesaikanBayaran = async (kaedah: 'duitnow_qr' | 'tunai') => {
-    if (!pesananBayaran) return;
+  // 3. Selesaikan Bayaran & Sedia Data Resit
+  const selesaikanPesanan = async () => {
+    if (!pesananDipilih) return;
+
+    const jumlah = kiraJumlahBayaran();
+    const sah = window.confirm(
+      `Sahkan penerimaan bayaran sebanyak RM ${jumlah.toFixed(2)} (${
+        kaedahBayaran === 'tunai' ? 'Tunai' : 'DuitNow QR'
+      }) untuk pesakit ${pesananDipilih.no_giliran}?`
+    );
+
+    if (!sah) return;
+
     setMemproses(true);
-
     try {
-      const tarikhKini = new Date();
-      const tarikhFormat = tarikhKini.toISOString().split('T')[0];
-      const nomborRawak = Math.floor(1000 + Math.random() * 9000);
-      const noResitJana = `REC-${tarikhFormat.replace(/-/g, '')}-${nomborRawak}`;
+      const kini = new Date();
+      const tarikhHariIni = kini.toISOString().split('T')[0];
+      const noResit = `DS-${Date.now().toString().slice(-6)}`;
+      const waktuStr = kini.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' });
 
-      await supabase
-        .from('pesanan_ubat')
-        .update({ status_bayaran: 'telah_bayar', kaedah_bayaran: kaedah })
-        .eq('id', pesananBayaran.id);
+      // A. Rekod Transaksi ke lejar_kewangan
+      if (jumlah > 0) {
+        await supabase.from('lejar_kewangan').insert({
+          no_resit: noResit,
+          pesakit_id: pesananDipilih.pesakit_id,
+          jenis_transaksi: 'masuk',
+          kaedah_bayaran: kaedahBayaran,
+          jumlah: jumlah,
+          tarikh: tarikhHariIni,
+          keterangan: `Bayaran penawar rawatan - ${pesananDipilih.no_giliran}`
+        });
 
-      await supabase.from('lejar_kewangan').insert({
-        no_resit: noResitJana,
-        jenis_transaksi: 'masuk',
-        kategori: 'bayaran_rawatan',
-        jumlah: pesananBayaran.jumlah_bayaran,
-        kaedah_bayaran: kaedah,
-        pesakit_id: pesananBayaran.pesakit_id,
-        tarikh: tarikhFormat,
-        catatan: `Bayaran rawatan & penawar (${pesananBayaran.pesakit?.nama || 'Pesakit'})`
-      });
+        // B. Tolak stok bahan_penawar & rekod log inventori
+        const ubatList = pesananDipilih.sesi_rawatan?.senarai_ubat || [];
+        for (const item of ubatList) {
+          const { data: bahanSemasa } = await supabase
+            .from('bahan_penawar')
+            .select('stok_semasa')
+            .eq('id', item.id)
+            .maybeSingle();
 
-      if (pesananBayaran.senarai_item && pesananBayaran.senarai_item.length > 0) {
-        for (const item of pesananBayaran.senarai_item) {
-          if (item.item_id && item.item_id !== 'custom_item' && item.item_id !== 'sijil_mc') {
-            const { data: dataBahan } = await supabase
-              .from('bahan_penawar')
-              .select('id, stok_semasa')
-              .eq('id', item.item_id)
-              .maybeSingle();
+          if (bahanSemasa) {
+            const bakiBaru = Math.max(0, (bahanSemasa.stok_semasa || 0) - item.kuantiti);
+            await supabase.from('bahan_penawar').update({ stok_semasa: bakiBaru }).eq('id', item.id);
 
-            if (dataBahan) {
-              const bakiBaru = Math.max(0, (dataBahan.stok_semasa || 0) - (item.kuantiti || 1));
-              await supabase.from('bahan_penawar').update({ stok_semasa: bakiBaru }).eq('id', item.item_id);
-              await supabase.from('inventori_log').insert({
-                bahan_id: item.item_id,
-                jenis_pergerakan: 'keluar',
-                kuantiti: item.kuantiti,
-                baki_selepas: bakiBaru,
-                catatan: `Jualan Kaunter (Resit: ${noResitJana})`
-              });
-            }
+            await supabase.from('inventori_log').insert({
+              bahan_id: item.id,
+              jenis_pergerakan: 'keluar',
+              kuantiti: item.kuantiti,
+              baki_selepas: bakiBaru,
+              catatan: `Jualan kaunter rawatan ${pesananDipilih.no_giliran}`
+            });
           }
         }
       }
 
-      setResitSelesai({
-        ...pesananBayaran,
-        no_resit: noResitJana,
-        kaedah_bayaran: kaedah,
-        tarikh_masa: tarikhKini.toLocaleString('ms-MY')
-      });
+      // C. Kemaskini status sesi_rawatan & giliran
+      if (pesananDipilih.sesi_rawatan?.id) {
+        await supabase
+          .from('sesi_rawatan')
+          .update({ status_bayaran: 'selesai' })
+          .eq('id', pesananDipilih.sesi_rawatan.id);
+      }
 
-      setPesananList(prev => prev.filter(p => p.id !== pesananBayaran.id));
-      setPesananBayaran(null);
+      await supabase
+        .from('giliran')
+        .update({ status: 'selesai' })
+        .eq('id', pesananDipilih.id);
+
+      // D. Tetapkan Data Resit untuk Cetakan Automatik
+      const dataResit: ResitCetak = {
+        noResit,
+        tarikh: kini.toLocaleDateString('ms-MY'),
+        masa: waktuStr,
+        noGiliran: pesananDipilih.no_giliran,
+        namaPesakit: pesananDipilih.pesakit?.nama || 'Pesakit Am',
+        noIc: pesananDipilih.pesakit?.no_ic || '-',
+        namaPerawat: pesananDipilih.perawat?.nama || 'Tabib Bertugas',
+        kaedahBayaran: kaedahBayaran === 'tunai' ? 'Tunai (Cash)' : 'DuitNow QR',
+        senaraiUbat: pesananDipilih.sesi_rawatan?.senarai_ubat || [],
+        jumlahBayaran: jumlah,
+        diberiMc: Boolean(pesananDipilih.sesi_rawatan?.diberi_mc),
+        tempohMc: pesananDipilih.sesi_rawatan?.tempoh_mc_hari || 0
+      };
+
+      setResitUntukCetak(dataResit);
+      await muatDataFarmasi();
     } catch (err: any) {
-      alert('Ralat pengesahan bayaran: ' + err.message);
+      alert('Ralat memproses pesanan: ' + err.message);
     } finally {
       setMemproses(false);
     }
   };
 
-  const kiraTarikhTamatMC = (hari: number) => {
-    const tarikh = new Date();
-    tarikh.setDate(tarikh.getDate() + (hari - 1));
-    return tarikh.toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' });
-  };
+  const jumlahBayaran = kiraJumlahBayaran();
 
   return (
-    <div className={styles.container}>
-      <div style={{ marginBottom: '1rem' }} className={styles.noPrint}>
-        <Link href="/" style={{ color: '#64748b', fontSize: '0.85rem', textDecoration: 'none' }}>
-          ← Menu Utama
-        </Link>
-      </div>
+    <div style={{ minHeight: '100vh', backgroundColor: '#0b1120', color: '#f1f5f9', fontFamily: 'inherit' }}>
+      {/* GAYA CETAKAN POS TERMA (80MM) - KALIS HALAMAN KOSONG */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        #pos-receipt-area {
+          display: none;
+        }
 
-      <header className={`${styles.header} ${styles.noPrint}`}>
-        <div>
-          <h1 className={styles.title}>
-            <PackageCheck size={28} /> Kaunter Farmasi & Pembayaran
-          </h1>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
-            Pantau bungkusan penawar ruqyah, bantuan kerusi roda & kutipan bayaran
-          </p>
-        </div>
-        <div className={styles.badgeLive}>
-          Pesanan Menunggu: {pesananList.length}
-        </div>
-      </header>
+        @media print {
+          @page {
+            margin: 0;
+            size: auto;
+          }
+          html, body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          #pos-receipt-area {
+            display: block !important;
+            width: 74mm !important;
+            margin: 0 auto !important;
+            padding: 5mm 3mm !important;
+            color: #000000 !important;
+            background-color: #ffffff !important;
+            font-family: 'Courier New', Courier, monospace !important;
+            font-size: 11px !important;
+            line-height: 1.35 !important;
+          }
+          #pos-receipt-area * {
+            color: #000000 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+          }
+        }
+      `}} />
 
-      {/* SEPANDUK AMARAN KELUAR MASUK KERUSI RODA */}
-      {senaraiWheelchair.length > 0 && (
-        <div className={styles.noPrint} style={{
-          backgroundColor: '#451a03',
-          border: '2px solid #f59e0b',
-          borderRadius: '0.85rem',
-          padding: '1rem 1.25rem',
-          marginBottom: '1.5rem',
-          boxShadow: '0 10px 15px -3px rgba(245, 158, 11, 0.2)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#fef08a', fontWeight: 800, fontSize: '1rem', marginBottom: '0.75rem' }}>
-            <Accessibility size={22} color="#f59e0b" />
-            <span>PERMINTAAN KERUSI RODA DI KAWASAN DROP-OFF / PARKIR ({senaraiWheelchair.length})</span>
+      {/* STRUKTUR RESIT KHAS CETAKAN (TIADA TEKS ARAB / HADIS) */}
+      {resitUntukCetak && (
+        <div id="pos-receipt-area">
+          <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>PUSAT RAWATAN ISLAM</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px', letterSpacing: '0.5px' }}>DARUL SYIFA'</div>
+            <div style={{ fontSize: '10px' }}>Klinik Pengubatan Islam SyifaLink</div>
+            <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }}></div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {senaraiWheelchair.map((item) => (
-              <div key={item.id} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                backgroundColor: '#291203',
-                border: '1px solid #78350f',
-                padding: '0.75rem 1rem',
-                borderRadius: '0.5rem',
-                flexWrap: 'wrap',
-                gap: '0.5rem'
-              }}>
-                <div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#38bdf8' }}>
-                    {item.no_giliran} - {item.pesakit?.nama}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#fef3c7', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
-                    <span>Tel: <strong>{item.pesakit?.no_telefon}</strong></span>
-                    <span>•</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Car size={14} color="#f59e0b" /> Kenderaan: <strong>{item.no_plat_kereta || 'Sila Hubungi'}</strong>
-                    </span>
+          <div style={{ marginBottom: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>No. Resit:</span>
+              <strong>{resitUntukCetak.noResit}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Tarikh:</span>
+              <span>{resitUntukCetak.tarikh} {resitUntukCetak.masa}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>No. Giliran:</span>
+              <strong style={{ fontSize: '13px' }}>{resitUntukCetak.noGiliran}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Pesakit:</span>
+              <span>{resitUntukCetak.namaPesakit}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Tabib:</span>
+              <span>{resitUntukCetak.namaPerawat}</span>
+            </div>
+            <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }}></div>
+          </div>
+
+          <div style={{ marginBottom: '6px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>ITEM PENAWAR:</div>
+            {resitUntukCetak.senaraiUbat.length === 0 ? (
+              <div>Rawatan Ruqyah Am (RM 0.00)</div>
+            ) : (
+              resitUntukCetak.senaraiUbat.map((u, i) => (
+                <div key={i} style={{ marginBottom: '3px' }}>
+                  <div>{u.nama_item}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '8px', color: '#222' }}>
+                    <span>{u.kuantiti} x RM {Number(u.harga).toFixed(2)}</span>
+                    <span>RM {(Number(u.harga) * Number(u.kuantiti)).toFixed(2)}</span>
                   </div>
                 </div>
+              ))
+            )}
+            <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }}></div>
+          </div>
 
-                <button
-                  onClick={() => sahkanKerusiRodaDiserahkan(item.id)}
-                  style={{
-                    backgroundColor: '#10b981',
-                    color: '#022c22',
-                    border: 'none',
-                    borderRadius: '0.4rem',
-                    padding: '0.55rem 0.95rem',
-                    fontWeight: 800,
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem'
-                  }}
-                >
-                  <Check size={16} /> Kerusi Roda Diserahkan
-                </button>
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold' }}>
+              <span>JUMLAH:</span>
+              <span>RM {resitUntukCetak.jumlahBayaran.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+              <span>Kaedah:</span>
+              <span>{resitUntukCetak.kaedahBayaran}</span>
+            </div>
+            {resitUntukCetak.diberiMc && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginTop: '2px' }}>
+                <span>Cuti Sakit:</span>
+                <span>{resitUntukCetak.tempohMc} Hari</span>
               </div>
-            ))}
+            )}
+            <div style={{ borderBottom: '1px dashed #000', margin: '6px 0' }}></div>
+          </div>
+
+          {/* KATA-KATA HARAPAN KESEMBUHAN UMUM */}
+          <div style={{ textAlign: 'center', marginTop: '8px', padding: '0 2px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 'bold', marginBottom: '3px', textTransform: 'uppercase' }}>
+              Semoga Lekas Sembuh
+            </div>
+            <div style={{ fontSize: '9px', fontStyle: 'italic', marginBottom: '5px' }}>
+              "Kami mendoakan agar anda lekas sembuh, dipermudahkan segala urusan dan sentiasa berada dalam perlindungan-Nya."
+            </div>
+            <div style={{ fontSize: '8.5px', color: '#555' }}>
+              Terima kasih atas kunjungan anda.<br />
+              Pusat Rawatan Islam Darul Syifa'
+            </div>
           </div>
         </div>
       )}
 
-      {/* Senarai Pesanan Farmasi */}
-      {pesananList.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#64748b' }} className={styles.noPrint}>
-          <p style={{ fontSize: '1.1rem' }}>Tiada pesanan penawar aktif buat masa ini.</p>
-        </div>
-      ) : (
-        <div className={`${styles.gridOrders} ${styles.noPrint}`}>
-          {pesananList.map((order) => {
-            const siapBungkus = order.status_bungkusan === 'siap_bungkus';
-            const adaMC = order.sesi_rawatan?.perlu_mc || order.senarai_item?.some((it: any) => it.item_id === 'sijil_mc');
+      {/* PAPARAN KONSOL FARMASI (DISEMBUNYIKAN SEMASA PRINT) */}
+      <div className="no-print" style={{ padding: '1.5rem' }}>
+        {/* HEADER ATAS */}
+        <div style={{ maxWidth: '1200px', margin: '0 auto 1.5rem auto' }}>
+          <Link href="/" style={{ color: '#64748b', fontSize: '0.85rem', textDecoration: 'none' }}>
+            ← Menu Utama
+          </Link>
 
-            return (
-              <div key={order.id} className={styles.orderCard}>
-                <div className={styles.cardHeader}>
-                  <div>
-                    <h3 className={styles.patientName}>{order.pesakit?.nama || 'Pesakit'}</h3>
-                    <p className={styles.patientIC}>IC: {order.pesakit?.no_ic}</p>
-                  </div>
-                  <span className={`${styles.tagBungkus} ${siapBungkus ? styles.tagHijau : styles.tagKuning}`}>
-                    {siapBungkus ? 'Siap Dibungkus' : 'Perlu Dibungkus'}
-                  </span>
-                </div>
-
-                <div className={styles.itemList}>
-                  {order.senarai_item?.map((item: any, idx: number) => (
-                    <div key={idx} className={styles.itemRow}>
-                      <span>{item.kuantiti}x {item.nama}</span>
-                      <span style={{ fontWeight: 600, color: item.harga_seunit === 0 ? '#34d399' : '#38bdf8' }}>
-                        {item.harga_seunit === 0 ? 'PERCUMA' : `RM ${(item.harga_seunit * item.kuantiti).toFixed(2)}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {adaMC && (
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => setPaparanMC(order)}
-                      className={styles.btnMC}
-                      style={{ width: '100%' }}
-                    >
-                      <FileText size={16} /> Cetak Sijil Perakuan Cuti Sakit (MC)
-                    </button>
-                  </div>
-                )}
-
-                <div className={styles.cardFooter}>
-                  <div className={styles.totalRow}>
-                    <span className={styles.totalLabel}>Jumlah Perlu Dibayar:</span>
-                    <span className={styles.totalAmount}>RM {order.jumlah_bayaran?.toFixed(2)}</span>
-                  </div>
-
-                  <div className={styles.actions}>
-                    {!siapBungkus ? (
-                      <button onClick={() => tandakanSiapBungkus(order.id)} className={styles.btnPack}>
-                        Tanda Siap Bungkus
-                      </button>
-                    ) : (
-                      <button onClick={() => setPesananBayaran(order)} className={styles.btnPay}>
-                        Kutip Bayaran
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* MODAL 1: SIJIL MC */}
-      {paparanMC && (
-        <div className={styles.mcOverlay}>
-          <div className={styles.mcDocument}>
-            <div className={styles.mcHeader}>
-              <h2 className={styles.mcClinicTitle}>Pusat Rawatan Islam Darul Syifa'</h2>
-              <p className={styles.mcClinicSub}>Klinik Perubatan Islam & Ruqyah Syar'iyyah | Berdaftar & Diiktiraf</p>
-              <p className={styles.mcClinicSub} style={{ fontSize: '0.75rem', marginTop: '2px' }}>
-                No. Perakuan Pendaftaran: DS-SEL-2026/0914
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+            <div>
+              <h1 style={{ fontSize: '1.45rem', fontWeight: 700, color: '#f59e0b', margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Package size={24} /> Kaunter Farmasi & Pembayaran
+              </h1>
+              <p style={{ margin: '0.2rem 0 0 0', color: '#94a3b8', fontSize: '0.82rem', fontWeight: 400 }}>
+                Pantau bungkusan penawar ruqyah, bantuan kerusi roda & kutipan bayaran
               </p>
             </div>
 
-            <div className={styles.mcDocTitle}>SIJIL PERAKUAN RAWATAN & CUTI REHAT</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {resitUntukCetak && (
+                <button
+                  onClick={() => window.print()}
+                  style={{
+                    backgroundColor: '#1e293b',
+                    color: '#34d399',
+                    border: '1px solid #059669',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '0.5rem',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                  title="Cetak semula resit pesakit terakhir"
+                >
+                  <Printer size={13} /> Cetak Semula Resit
+                </button>
+              )}
 
-            <p style={{ textAlign: 'right', fontSize: '0.85rem', fontFamily: 'sans-serif', margin: '0.5rem 0 1rem 0' }}>
-              Tarikh: <strong>{new Date().toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
-            </p>
-
-            <div className={styles.mcBodyText}>
-              Dengan ini diperakui bahawa penama di bawah:
-              <br /><br />
-              Nama Pesakit : <span className={styles.mcHighlight}>{paparanMC.pesakit?.nama}</span>
-              <br />
-              No. Kad Pengenalan : <span className={styles.mcHighlight}>{paparanMC.pesakit?.no_ic}</span>
-              <br /><br />
-              Telah hadir menjalani sesi rawatan terapi ruqyah syar'iyyah intensif di pusat rawatan kami pada tarikh di atas.
-              <br /><br />
-              Dapatan Klinikal / Sebab Rehat:
-              <br />
-              <span className={styles.mcHighlight} style={{ fontStyle: 'italic', display: 'inline-block', marginTop: '0.25rem' }}>
-                "{paparanMC.sesi_rawatan?.sebab_mc || 'Kelesuan fizikal melampau kesan reaksi rawatan ruqyah'}"
-              </span>
-              <br /><br />
-              Atas nasihat perawat, beliau diberikan cuti rehat selama{' '}
-              <span className={styles.mcHighlight}>{paparanMC.sesi_rawatan?.tempoh_mc_hari || 1} Hari</span> bermula pada{' '}
-              <strong>{new Date().toLocaleDateString('ms-MY', { day: 'numeric', month: 'long', year: 'numeric' })}</strong> sehingga{' '}
-              <strong>{kiraTarikhTamatMC(paparanMC.sesi_rawatan?.tempoh_mc_hari || 1)}</strong> bagi tujuan pemulihan afiah di rumah.
-            </div>
-
-            <div className={styles.mcSignatureGrid}>
-              <div className={styles.mcSignatureBox}>
-                <div style={{ height: '50px' }}></div>
-                <div className={styles.mcSignatureLine}></div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
-                  {paparanMC.sesi_rawatan?.perawat?.nama || 'Ustaz Perawat Bertugas'}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Perawat Bertauliah Darul Syifa'</div>
-              </div>
-
-              <div className={styles.mcSignatureBox}>
-                <div style={{
-                  border: '2px dashed #94a3b8',
-                  borderRadius: '50%',
-                  width: '90px',
-                  height: '90px',
-                  margin: '0 auto',
+              <button
+                onClick={muatDataFarmasi}
+                style={{
+                  backgroundColor: '#1e293b',
+                  color: '#38bdf8',
+                  border: '1px solid #334155',
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '0.5rem',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#94a3b8',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  transform: 'rotate(-10deg)'
-                }}>
-                  COP RASMI
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>Klinik Darul Syifa'</div>
-              </div>
-            </div>
-
-            <div className={styles.noPrint} style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button type="button" onClick={() => window.print()} className={styles.btnPrintReceipt}>
-                <Printer size={16} /> Cetak Sijil MC (A4 / A5)
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaparanMC(null)}
-                style={{ flex: 1, backgroundColor: '#334155', color: '#ffffff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', cursor: 'pointer', fontWeight: 600, marginTop: '0.75rem' }}
+                  gap: '0.4rem'
+                }}
               >
-                Tutup
+                <RefreshCw size={13} /> Segar Semula
               </button>
+
+              <span style={{
+                backgroundColor: '#d97706',
+                color: '#ffffff',
+                padding: '0.35rem 0.85rem',
+                borderRadius: '2rem',
+                fontWeight: 600,
+                fontSize: '0.8rem'
+              }}>
+                Pesanan Menunggu: {senaraiPesanan.length}
+              </span>
             </div>
           </div>
         </div>
-      )}
 
-      {/* MODAL 2: BAYARAN */}
-      {pesananBayaran && (
-        <div className={`${styles.modalOverlay} ${styles.noPrint}`}>
-          <div className={styles.modalContent}>
-            <h2 style={{ fontSize: '1.25rem', color: '#34d399', margin: '0 0 0.5rem 0' }}>Penerimaan Bayaran</h2>
-            <p style={{ fontSize: '0.9rem', color: '#cbd5e1', margin: 0 }}>
-              Pesakit: <strong>{pesananBayaran.pesakit?.nama}</strong>
-            </p>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ffffff', margin: '0.5rem 0' }}>
-              RM {pesananBayaran.jumlah_bayaran?.toFixed(2)}
+        {/* KANDUNGAN UTAMA */}
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          {sedangMemuat ? (
+            <div style={{ textAlign: 'center', padding: '5rem 0', color: '#64748b', fontSize: '0.9rem' }}>
+              Memuatkan pesanan farmasi...
             </div>
-
-            <div className={styles.qrPlaceholder}>
-              <QrCode size={110} color="#0f172a" />
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, marginTop: '0.25rem', color: '#047857' }}>DuitNow QR Dinamik</span>
+          ) : senaraiPesanan.length === 0 ? (
+            <div style={{
+              backgroundColor: '#0f172a',
+              border: '1px dashed #334155',
+              borderRadius: '1rem',
+              padding: '4.5rem 2rem',
+              textAlign: 'center',
+              color: '#94a3b8'
+            }}>
+              <Package size={48} style={{ opacity: 0.3, marginBottom: '0.85rem' }} />
+              <p style={{ fontSize: '1.05rem', fontWeight: 600, margin: 0, color: '#cbd5e1' }}>
+                Tiada pesanan penawar aktif buat masa ini.
+              </p>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.35rem' }}>
+                Pesanan akan muncul di sini sebaik sahaja tabib menekan butang "Hantar ke Farmasi".
+              </p>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <button disabled={memproses} onClick={() => selesaikanBayaran('duitnow_qr')} style={{ backgroundColor: '#10b981', color: '#022c22', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', fontWeight: 700, cursor: 'pointer' }}>
-                Sah DuitNow (Lulus)
-              </button>
-              <button disabled={memproses} onClick={() => selesaikanBayaran('tunai')} style={{ backgroundColor: '#334155', color: '#ffffff', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-                Bayar Tunai
-              </button>
-              <button onClick={() => setPesananBayaran(null)} style={{ background: 'none', color: '#94a3b8', border: 'none', padding: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: RESIT SELESAI */}
-      {resitSelesai && (
-        <div className={styles.modalOverlay}>
-          <div className={`${styles.modalContent} ${styles.printReceiptArea}`}>
-            <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
-              <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.1rem', fontWeight: 800 }}>DARUL SYIFA'</h3>
-              <p style={{ margin: 0, fontSize: '0.75rem' }}>Pusat Rawatan Islam</p>
-              <p style={{ margin: 0, fontSize: '0.7rem' }}>--------------------------------</p>
-              <p style={{ margin: '0.2rem 0', fontSize: '0.75rem' }}>RESIT RASMI PEMBAYARAN</p>
-              <p style={{ margin: 0, fontSize: '0.7rem' }}>--------------------------------</p>
-            </div>
-
-            <div style={{ textAlign: 'left', fontSize: '0.8rem', lineHeight: '1.4' }}>
-              <div>Pesakit : {resitSelesai.pesakit?.nama}</div>
-              <div>No. IC  : {resitSelesai.pesakit?.no_ic}</div>
-              <div>Masa    : {resitSelesai.tarikh_masa}</div>
-              <div>Kaedah  : {resitSelesai.kaedah_bayaran === 'duitnow_qr' ? 'DuitNow QR' : 'Tunai'}</div>
-              <div style={{ margin: '0.4rem 0', borderBottom: '1px dashed #cbd5e1' }}></div>
-              <div style={{ fontWeight: 700, marginBottom: '0.3rem' }}>SENARAI PENAWAR:</div>
-              {resitSelesai.senarai_item?.map((it: any, i: number) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                  <span>{it.kuantiti}x {it.nama}</span>
-                  <span>{it.harga_seunit === 0 ? 'PERCUMA' : `RM ${(it.harga_seunit * it.kuantiti).toFixed(2)}`}</span>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1.25rem', alignItems: 'flex-start' }}>
+              {/* SENARAI TIKET KIRI */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Senarai Tiket Menunggu ({senaraiPesanan.length})
                 </div>
-              ))}
-              <div style={{ margin: '0.4rem 0', borderBottom: '1px dashed #cbd5e1' }}></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '0.9rem' }}>
-                <span>JUMLAH BESAR:</span>
-                <span>RM {resitSelesai.jumlah_bayaran?.toFixed(2)}</span>
-              </div>
-            </div>
 
-            <div className={styles.noPrint} style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-              <button onClick={() => window.print()} className={styles.btnPrintReceipt}>
-                <Printer size={16} /> Cetak Resit
-              </button>
-              <button onClick={() => setResitSelesai(null)} style={{ flex: 1, backgroundColor: '#334155', color: '#ffffff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>
-                Tutup
-              </button>
+                {senaraiPesanan.map((item) => {
+                  const dipilih = pesananDipilih?.id === item.id;
+                  const jumlahUbat = item.sesi_rawatan?.senarai_ubat?.length || 0;
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setPesananDipilih(item)}
+                      style={{
+                        backgroundColor: dipilih ? '#1e293b' : '#0f172a',
+                        border: dipilih ? '1.5px solid #f59e0b' : '1px solid #1e293b',
+                        borderRadius: '0.65rem',
+                        padding: '0.85rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <span style={{ backgroundColor: '#0284c7', color: '#ffffff', fontWeight: 700, fontSize: '0.8rem', padding: '0.2rem 0.55rem', borderRadius: '0.3rem' }}>
+                          {item.no_giliran}
+                        </span>
+                        {item.perlu_kerusi_roda && (
+                          <span style={{ fontSize: '0.85rem' }} title="Pesakit Kerusi Roda">♿</span>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.pesakit?.nama || 'Pesakit Am'}
+                      </div>
+
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.3rem', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Tabib: {item.perawat?.nama?.split(' ')[0] || '-'}</span>
+                        <strong style={{ color: jumlahUbat > 0 ? '#34d399' : '#64748b', fontWeight: 600 }}>
+                          {jumlahUbat} Penawar
+                        </strong>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* BUTIRAN PESANAN KANAN */}
+              {pesananDipilih && (
+                <div style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '0.85rem', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+                  {/* HEADER PESAKIT */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #1e293b', paddingBottom: '0.85rem' }}>
+                    <div>
+                      <span style={{ backgroundColor: '#0284c7', color: '#ffffff', fontWeight: 700, fontSize: '0.85rem', padding: '0.2rem 0.65rem', borderRadius: '0.35rem' }}>
+                        {pesananDipilih.no_giliran}
+                      </span>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f1f5f9', margin: '0.4rem 0 0.2rem 0' }}>
+                        {pesananDipilih.pesakit?.nama || 'Pesakit Am'}
+                      </h2>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'flex', gap: '1rem' }}>
+                        <span>IC: {pesananDipilih.pesakit?.no_ic || '-'}</span>
+                        <span>Tel: {pesananDipilih.pesakit?.no_telefon || '-'}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Dirawat Oleh:</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#38bdf8' }}>
+                        {pesananDipilih.perawat?.nama || 'Tabib Bertugas'}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        {pesananDipilih.perawat?.no_bilik || 'Bilik Rawatan'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DAPATAN RAWATAN & MC */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
+                    <div style={{ backgroundColor: '#1e293b', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #334155' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Dapatan / Reaksi Ruqyah</div>
+                      <div style={{ fontSize: '0.82rem', color: '#f1f5f9', fontWeight: 500, marginTop: '0.25rem' }}>
+                        {Array.isArray(pesananDipilih.sesi_rawatan?.reaksi_rawatan) && pesananDipilih.sesi_rawatan.reaksi_rawatan.length > 0
+                          ? pesananDipilih.sesi_rawatan.reaksi_rawatan.join(', ')
+                          : pesananDipilih.sesi_rawatan?.dapatan_gangguan || 'Tiada maklumat direkodkan'}
+                      </div>
+                    </div>
+
+                    {pesananDipilih.sesi_rawatan?.diberi_mc && (
+                      <div style={{ backgroundColor: '#1e293b', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #a855f7' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#c084fc', fontWeight: 600, textTransform: 'uppercase' }}>Sijil Cuti Sakit (MC)</div>
+                        <div style={{ fontSize: '0.82rem', color: '#f1f5f9', fontWeight: 600, marginTop: '0.25rem' }}>
+                          Diberikan: {pesananDipilih.sesi_rawatan.tempoh_mc_hari} Hari
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SENARAI PENAWAR */}
+                  <div>
+                    <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f59e0b', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Package size={16} /> Senarai Penawar Yang Ditetapkan
+                    </h3>
+
+                    {(!pesananDipilih.sesi_rawatan?.senarai_ubat || pesananDipilih.sesi_rawatan.senarai_ubat.length === 0) ? (
+                      <div style={{ padding: '1rem', backgroundColor: '#1e293b', borderRadius: '0.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>
+                        Tiada ubat penawar fizikal dicadangkan (Rawatan Doa Sahaja).
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        {pesananDipilih.sesi_rawatan.senarai_ubat.map((u, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              backgroundColor: '#1e293b',
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: '0.45rem',
+                              border: '1px solid #334155'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f1f5f9' }}>{u.nama_item}</div>
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                                RM {Number(u.harga).toFixed(2)} × {u.kuantiti} unit
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#34d399' }}>
+                              RM {(Number(u.harga) * Number(u.kuantiti)).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* KAEDAH BAYARAN & PENGESAHAN */}
+                  <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.65rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#94a3b8' }}>Jumlah Perlu Dibayar:</span>
+                      <span style={{ fontSize: '1.45rem', fontWeight: 700, color: '#34d399' }}>
+                        RM {jumlahBayaran.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setKaedahBayaran('tunai');
+                          setBukaModalQr(false);
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.55rem',
+                          backgroundColor: kaedahBayaran === 'tunai' ? '#059669' : '#0f172a',
+                          border: kaedahBayaran === 'tunai' ? '1.5px solid #34d399' : '1px solid #334155',
+                          borderRadius: '0.45rem',
+                          color: '#ffffff',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        <Banknote size={15} /> Tunai (Cash)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setKaedahBayaran('duitnow_qr');
+                          setBukaModalQr(true);
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.55rem',
+                          backgroundColor: kaedahBayaran === 'duitnow_qr' ? '#0284c7' : '#0f172a',
+                          border: kaedahBayaran === 'duitnow_qr' ? '1.5px solid #38bdf8' : '1px solid #334155',
+                          borderRadius: '0.45rem',
+                          color: '#ffffff',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        <CreditCard size={15} /> DuitNow QR
+                      </button>
+                    </div>
+
+                    {/* KOTAK RUJUKAN DUITNOW QR */}
+                    {kaedahBayaran === 'duitnow_qr' && (
+                      <div style={{
+                        backgroundColor: '#0f172a',
+                        border: '1px dashed #38bdf8',
+                        borderRadius: '0.5rem',
+                        padding: '0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem'
+                      }}>
+                        <QrCode size={36} color="#38bdf8" />
+                        <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                          <div><strong>Imbasan DuitNow QR Aktif</strong></div>
+                          <span style={{ color: '#94a3b8' }}>
+                            Minta pesakit imbas kod QR kaunter klinik dan sahkan penerimaan bayaran pada skrin telefon atau DuitNow Soundbox.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={memproses}
+                      onClick={selesaikanPesanan}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        backgroundColor: '#059669',
+                        border: 'none',
+                        borderRadius: '0.5rem',
+                        color: '#ffffff',
+                        fontSize: '0.92rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.45rem',
+                        boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)'
+                      }}
+                    >
+                      <CheckCircle size={18} /> Selesai Terima Bayaran & Serah Ubat (Cetak Resit)
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
