@@ -419,7 +419,6 @@ export default function SkrinTVDewan() {
     const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
     const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
 
-    // Pramuat suara panggilan
     if (audioTtsRef.current) {
       audioTtsRef.current.src = audioUrl;
       audioTtsRef.current.load();
@@ -450,13 +449,11 @@ export default function SkrinTVDewan() {
       }
     };
 
-    // Mainkan fail loceng chime.mp3 terlebih dahulu
     if (audioChimeRef.current) {
       audioChimeRef.current.currentTime = 0;
       audioChimeRef.current.volume = 1.0;
 
       audioChimeRef.current.onended = () => {
-        // Sebaik loceng tamat, tunggu jeda santai 350ms sebelum suara bermula
         setTimeout(mainkanSuaraPanggilan, 350);
       };
 
@@ -467,7 +464,6 @@ export default function SkrinTVDewan() {
         });
       }
 
-      // Sandaran masa jika onended disekat oleh pelayar TV
       setTimeout(mainkanSuaraPanggilan, 2600);
     } else {
       mainkanSuaraPanggilan();
@@ -576,7 +572,9 @@ export default function SkrinTVDewan() {
         .order('created_at', { ascending: true })
         .limit(6);
 
-      setSenaraiMenunggu(menungguData || []);
+      if (menungguData) {
+        setSenaraiMenunggu(menungguData);
+      }
     } catch (err) {
       console.error('Ralat kemaskini TV:', err);
     }
@@ -685,37 +683,147 @@ export default function SkrinTVDewan() {
         </header>
 
         <div className={styles.mainLayout}>
-          {/* BARIS 1 KIRI: SEDANG DIPANGGIL */}
-          <section className={styles.nowSeeingCard}>
-            <div className={styles.nowSeeingHeader}>
+          {/* ========================================================
+              BARIS 1 KIRI: SEDANG DIPANGGIL (DITURUNKAN KE BAWAH AGAR SEIMBANG)
+              ======================================================== */}
+          <section 
+            className={styles.nowSeeingCard}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingTop: '1.4rem',
+              paddingBottom: '1.4rem',
+              height: '100%',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div className={styles.nowSeeingHeader} style={{ marginBottom: '0.4rem' }}>
               <span className={styles.nowSeeingTitle}>SEDANG DIPANGGIL</span>
               <span className={styles.nowSeeingSubtitle}>NOMBOR GILIRAN</span>
             </div>
 
             {panggilanTerkini ? (
               <>
-                <div className={styles.activeNumber}>
-                  {panggilanTerkini.noGiliran}
-                  {panggilanTerkini.perluKerusiRoda && (
-                    <span className={styles.wheelchairIcon} title="Pesakit Memerlukan Kerusi Roda">♿</span>
-                  )}
+                {/* BLOK NOMBOR & NAMA PESAKIT (DITOLAK KE BAWAH DENGAN MARGIN ATAS) */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginTop: '0.85rem',
+                  marginBottom: '1rem',
+                  width: '100%'
+                }}>
+                  <div 
+                    className={styles.activeNumber}
+                    style={{
+                      lineHeight: 1,
+                      margin: '0 0 0.35rem 0'
+                    }}
+                  >
+                    {panggilanTerkini.noGiliran}
+                    {panggilanTerkini.perluKerusiRoda && (
+                      <span className={styles.wheelchairIcon} title="Pesakit Memerlukan Kerusi Roda">♿</span>
+                    )}
+                  </div>
+
+                  <div 
+                    className={styles.patientName}
+                    style={{
+                      fontSize: '2.2rem',
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                      marginTop: '0.2rem',
+                      textShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                      maxWidth: '96%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {panggilanTerkini.namaPesakit}
+                  </div>
                 </div>
 
-                <div className={styles.patientName}>{panggilanTerkini.namaPesakit}</div>
+                {/* KOTAK ARAHAN BILIK (DITOLAK RAPAT KE BAWAH DENGAN marginTop: auto) */}
+                <div 
+                  className={styles.proceedBox}
+                  style={{
+                    marginTop: 'auto',
+                    marginBottom: '0.35rem',
+                    padding: '1rem 1.25rem',
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <div 
+                    className={styles.proceedLabel}
+                    style={{
+                      fontSize: '1.2rem',
+                      fontWeight: 600,
+                      letterSpacing: '0.05em',
+                      marginBottom: '0.2rem'
+                    }}
+                  >
+                    Sila Masuk Ke
+                  </div>
 
-                <div className={styles.proceedBox}>
-                  <div className={styles.proceedLabel}>Sila Masuk Ke</div>
-                  <div className={styles.roomDestinationRow}>
-                    <span className={styles.roomDestination}>{panggilanTerkini.bilik}</span>
-                    <div className={styles.arrowCircle}>
-                      <ArrowRight size={26} strokeWidth={4} />
+                  <div 
+                    className={styles.roomDestinationRow}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.75rem',
+                      margin: '0.15rem 0'
+                    }}
+                  >
+                    <span 
+                      className={styles.roomDestination}
+                      style={{
+                        fontSize: '2.85rem',
+                        fontWeight: 900,
+                        lineHeight: 1,
+                        letterSpacing: '0.02em'
+                      }}
+                    >
+                      {panggilanTerkini.bilik}
+                    </span>
+                    <div 
+                      className={styles.arrowCircle}
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <ArrowRight size={24} strokeWidth={4} />
                     </div>
                   </div>
-                  <div className={styles.perawatName}>Bersama {panggilanTerkini.namaPerawat}</div>
+
+                  <div 
+                    className={styles.perawatName}
+                    style={{
+                      fontSize: '1.15rem',
+                      fontWeight: 600,
+                      marginTop: '0.35rem',
+                      letterSpacing: '0.01em'
+                    }}
+                  >
+                    Bersama {panggilanTerkini.namaPerawat}
+                  </div>
                 </div>
               </>
             ) : (
-              <div className={styles.emptyCallContent}>
+              <div className={styles.emptyCallContent} style={{ margin: 'auto 0' }}>
                 <Volume2 size={54} style={{ opacity: 0.6, marginBottom: '0.6rem' }} />
                 <p style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
                   Sila nantikan nombor anda diumumkan
