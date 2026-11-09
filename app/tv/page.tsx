@@ -63,7 +63,6 @@ export default function SkrinTVDewan() {
   const [videoSemasa, setVideoSemasa] = useState<ItemVideo | null>(null);
 
   const panggilanTerkiniRef = useRef<string | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const audioChimeRef = useRef<HTMLAudioElement | null>(null);
   const audioTtsRef = useRef<HTMLAudioElement | null>(null);
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
@@ -110,21 +109,9 @@ export default function SkrinTVDewan() {
     } catch (e) {}
   };
 
-  // 1. Skrin Penuh & Buka Kunci Audio Kekal
+  // 1. Skrin Penuh & Buka Kunci Audio
   const aktifkanSkrinPenuhDanAudio = () => {
     setAudioDibenarkan(true);
-
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new AudioCtx();
-        }
-        if (audioContextRef.current.state === 'suspended') {
-          audioContextRef.current.resume();
-        }
-      }
-    } catch (e) {}
 
     if (audioChimeRef.current) {
       audioChimeRef.current.play().then(() => {
@@ -171,15 +158,6 @@ export default function SkrinTVDewan() {
     };
     document.addEventListener('fullscreenchange', semakPerubahanFullscreen);
     return () => document.removeEventListener('fullscreenchange', semakPerubahanFullscreen);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
-    }
   }, []);
 
   // 2. Jam Digital
@@ -254,7 +232,7 @@ export default function SkrinTVDewan() {
     } catch (err) {}
   };
 
-  // 6. PENGURUSAN VIDEO SIARAN TV
+  // 6. Pengurusan Video Siaran TV
   const muatDataVideo = async () => {
     try {
       const { data } = await supabase
@@ -350,7 +328,7 @@ export default function SkrinTVDewan() {
     }
   }, [videoSemasa]);
 
-  // Redakan audio video semasa panggilan
+  // Redakan & Pulihkan Audio Video Latar
   const redakanAudioVideoLatar = () => {
     if (videoPlayerRef.current) {
       videoPlayerRef.current.muted = true;
@@ -361,7 +339,9 @@ export default function SkrinTVDewan() {
         '*'
       );
     }
+  };
 
+  const pulihkanAudioVideoLatar = () => {
     setTimeout(() => {
       const volPeratus = videoSemasa?.kelantangan_audio ?? 20;
       if (videoPlayerRef.current) {
@@ -378,7 +358,7 @@ export default function SkrinTVDewan() {
           '*'
         );
       }
-    }, 11000);
+    }, 1200);
   };
 
   const janaYouTubeEmbedUrl = (url: string, loop: boolean) => {
@@ -398,23 +378,12 @@ export default function SkrinTVDewan() {
     }`;
   };
 
-  // 7. SISTEM AUDIO: HANYA LOCENG RASMI (TIADA BUNYI TING-TING-TING BUATAN)
-  const mainkanChimeStudio = () => {
-    try {
-      if (audioChimeRef.current) {
-        audioChimeRef.current.currentTime = 0;
-        audioChimeRef.current.play().catch((err) => {
-          console.warn('Ralat memainkan fail chime:', err);
-        });
-      }
-    } catch (e) {
-      console.warn('Ralat Chime Studio:', e);
-    }
-  };
-
-  const janaTeksSebutanMelayu = (noGiliran: string, bilik: string, namaPerawat: string) => {
-    const abjad = noGiliran.charAt(0);
-    const nomborBahagian = noGiliran.substring(2);
+  // ========================================================
+  // 7. SISTEM PEMAIN CHUNK MP3 PERKATAAN DEMI PERKATAAN
+  // ========================================================
+  const binaSenaraiChunkPanggilan = (noGiliran: string, bilik: string, namaPerawat: string): string[] => {
+    const abjad = noGiliran.charAt(0).toUpperCase();
+    const nomborBahagian = noGiliran.replace(/^[A-Za-z]+[-_\s]*/, '');
 
     const sebutanDigit: { [key: string]: string } = {
       '0': 'kosong',
@@ -429,102 +398,120 @@ export default function SkrinTVDewan() {
       '9': 'sembilan'
     };
 
-    const digitDieja = nomborBahagian
+    const digitChunks = nomborBahagian
       .split('')
-      .map((digit) => sebutanDigit[digit] || digit)
-      .join(', ');
+      .map((d) => sebutanDigit[d] || d);
 
-    return `Nombor giliran, ${abjad}, ${digitDieja}. Sila masuk ke ${bilik}, bersama ${namaPerawat}.`;
+    const sebutanBilik = bilik
+      .replace(/\b1\b/g, 'satu')
+      .replace(/\b2\b/g, 'dua')
+      .replace(/\b3\b/g, 'tiga')
+      .replace(/\b4\b/g, 'empat')
+      .replace(/\b5\b/g, 'lima')
+      .replace(/\b6\b/g, 'enam')
+      .replace(/\b7\b/g, 'tujuh')
+      .replace(/\b8\b/g, 'lapan')
+      .replace(/\b9\b/g, 'sembilan');
+
+    const chunks: string[] = [
+      'Nombor giliran',
+      abjad,
+      ...digitChunks,
+      'Sila masuk ke',
+      sebutanBilik
+    ];
+
+    if (namaPerawat && !namaPerawat.toLowerCase().includes('tabib bertugas')) {
+      chunks.push(`bersama ${namaPerawat}`);
+    }
+
+    return chunks;
   };
 
-  // Sandaran Web Speech: Hanya jika pek suara Melayu/Indonesia wujud
-  const mainkanWebSpeechJikaAda = (teks: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    try {
-      const senaraiSuara = window.speechSynthesis.getVoices();
-      const suaraNusantara = senaraiSuara.find((v) =>
-        v.lang.toLowerCase().startsWith('ms') ||
-        v.lang.toLowerCase().startsWith('id') ||
-        v.name.toLowerCase().includes('malay') ||
-        v.name.toLowerCase().includes('melayu') ||
-        v.name.toLowerCase().includes('indonesia')
-      );
+  // Mainkan senarai chunk audio secara berantai (Chain Queue)
+  const mainkanSenaraiChunk = (senarai: string[], onSelesai: () => void) => {
+    if (!audioTtsRef.current || senarai.length === 0) {
+      onSelesai();
+      return;
+    }
 
-      // Elakkan suara robot Inggeris jika peranti tiada pek bahasa Melayu
-      if (!suaraNusantara) {
+    const audioEl = audioTtsRef.current;
+    let idx = 0;
+
+    const mainkanSeterusnya = () => {
+      if (idx >= senarai.length) {
+        audioEl.onended = null;
+        audioEl.onerror = null;
+        onSelesai();
         return;
       }
 
-      window.speechSynthesis.cancel();
-      const sebutan = new SpeechSynthesisUtterance(teks);
-      sebutan.voice = suaraNusantara;
-      sebutan.lang = suaraNusantara.lang;
-      sebutan.rate = 0.88;
-      sebutan.pitch = 1.0;
-      window.speechSynthesis.speak(sebutan);
-    } catch (err) {
-      console.error('Ralat Web Speech:', err);
-    }
-  };
+      const perkataan = senarai[idx];
+      idx += 1;
 
-  const mainkanAudioMelayu = (teks: string) => {
-    const audioUrl = `/api/tts?text=${encodeURIComponent(teks)}`;
+      // Setiap perkataan pendek dipanggil terus ke fail audio MP3
+      const urlChunkMp3 = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(perkataan)}&tl=ms&client=tw-ob`;
 
-    if (audioTtsRef.current) {
-      const el = audioTtsRef.current;
-      el.volume = 1.0;
+      audioEl.src = urlChunkMp3;
+      audioEl.volume = 1.0;
 
-      let dimainkan = false;
-
-      const onPlaying = () => {
-        dimainkan = true;
-        el.removeEventListener('playing', onPlaying);
-        el.removeEventListener('error', onError);
+      audioEl.onended = () => {
+        // Jeda kecil 120ms antara perkataan agar sebutan berbunyi semulajadi
+        setTimeout(mainkanSeterusnya, 120);
       };
 
-      const onError = () => {
-        el.removeEventListener('playing', onPlaying);
-        el.removeEventListener('error', onError);
-        if (!dimainkan) {
-          try {
-            const directAudio = new Audio();
-            directAudio.src = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(teks)}&tl=ms&client=tw-ob`;
-            directAudio.volume = 1.0;
-            directAudio.play().catch(() => {
-              mainkanWebSpeechJikaAda(teks);
-            });
-          } catch (e) {
-            mainkanWebSpeechJikaAda(teks);
-          }
-        }
+      audioEl.onerror = () => {
+        console.warn(`Ralat chunk MP3 "${perkataan}", meneruskan ke chunk seterusnya.`);
+        setTimeout(mainkanSeterusnya, 200);
       };
 
-      el.addEventListener('playing', onPlaying);
-      el.addEventListener('error', onError);
+      const p = audioEl.play();
+      if (p !== undefined) {
+        p.catch((e) => {
+          console.warn(`Gagal memainkan chunk "${perkataan}":`, e);
+          setTimeout(mainkanSeterusnya, 250);
+        });
+      }
+    };
 
-      el.src = audioUrl;
-      el.load();
-      el.play().catch(() => {
-        onError();
-      });
-    } else {
-      mainkanWebSpeechJikaAda(teks);
-    }
+    mainkanSeterusnya();
   };
 
   const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
-    // 1. Redakan video latar belakang
+    // 1. Redakan audio video siaran TV
     redakanAudioVideoLatar();
 
-    // 2. Mainkan loceng chime rasmi sahaja
-    mainkanChimeStudio();
+    const senaraiChunk = binaSenaraiChunkPanggilan(noGiliran, bilik, namaPerawat);
 
-    const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
+    let sudahMulaChunk = false;
+    const jalankanPanggilanChunk = () => {
+      if (sudahMulaChunk) return;
+      sudahMulaChunk = true;
+      mainkanSenaraiChunk(senaraiChunk, () => {
+        pulihkanAudioVideoLatar();
+      });
+    };
 
-    // 3. Suara Bahasa Melayu berbunyi selepas bunyi loceng selesai
-    setTimeout(() => {
-      mainkanAudioMelayu(ayatSebutan);
-    }, 2400);
+    // 2. Mainkan loceng rasmi chime.mp3 terlebih dahulu
+    if (audioChimeRef.current) {
+      audioChimeRef.current.currentTime = 0;
+      audioChimeRef.current.onended = () => {
+        // Selepas bunyi loceng tamat, tunggu 350ms sebelum memulakan sebutan perkataan
+        setTimeout(jalankanPanggilanChunk, 350);
+      };
+
+      const playChime = audioChimeRef.current.play();
+      if (playChime !== undefined) {
+        playChime.catch(() => {
+          setTimeout(jalankanPanggilanChunk, 400);
+        });
+      }
+
+      // Sandaran keselamatan jika acara onended tidak dipicu oleh pelayar TV
+      setTimeout(jalankanPanggilanChunk, 2600);
+    } else {
+      jalankanPanggilanChunk();
+    }
   };
 
   // 8. Muat Data Skrin & Status Bilik (Tapisan Bilik Bertugas Aktif)
