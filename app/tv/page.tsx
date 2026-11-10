@@ -39,6 +39,9 @@ export default function SkrinTVDewan() {
   const [audioDibenarkan, setAudioDibenarkan] = useState<boolean>(false);
   const [isSkrinPenuh, setIsSkrinPenuh] = useState<boolean>(false);
 
+  // Status Animasi Berkelip Semasa Suara Berkumandang
+  const [sedangPanggilAudio, setSedangPanggilAudio] = useState<boolean>(false);
+
   // Cuaca & Waktu Solat
   const [suhuCuaca, setSuhuCuaca] = useState<string>('26°C');
   const [statusCuaca, setStatusCuaca] = useState<string>('Mendung');
@@ -227,18 +230,18 @@ export default function SkrinTVDewan() {
   // 6. Pengurusan Video Siaran TV
   const muatDataVideo = async () => {
     try {
-      const { data } = await supabase
+      const { data: videoData } = await supabase
         .from('video_tv')
         .select('*')
         .eq('status_aktif', true)
         .order('created_at', { ascending: false });
 
-      if (data && data.length > 0) {
-        setSenaraiVideo(data);
+      if (videoData && videoData.length > 0) {
+        setSenaraiVideo(videoData);
         setVideoSemasa((prev) => {
-          if (!prev) return data[0];
-          const masihWujud = data.find((v) => v.id === prev.id);
-          return masihWujud || data[0];
+          if (!prev) return videoData[0];
+          const masihWujud = videoData.find((v) => v.id === prev.id);
+          return masihWujud || videoData[0];
         });
       } else {
         setSenaraiVideo([]);
@@ -415,6 +418,7 @@ export default function SkrinTVDewan() {
 
   const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
     redakanAudioVideoLatar();
+    setSedangPanggilAudio(true);
 
     const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
     const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
@@ -432,19 +436,23 @@ export default function SkrinTVDewan() {
       if (audioTtsRef.current) {
         audioTtsRef.current.volume = 1.0;
         audioTtsRef.current.onended = () => {
+          setSedangPanggilAudio(false);
           pulihkanAudioVideoLatar();
         };
         audioTtsRef.current.onerror = () => {
+          setSedangPanggilAudio(false);
           pulihkanAudioVideoLatar();
         };
 
         const playPromise = audioTtsRef.current.play();
         if (playPromise !== undefined) {
           playPromise.catch(() => {
+            setSedangPanggilAudio(false);
             pulihkanAudioVideoLatar();
           });
         }
       } else {
+        setSedangPanggilAudio(false);
         pulihkanAudioVideoLatar();
       }
     };
@@ -468,6 +476,10 @@ export default function SkrinTVDewan() {
     } else {
       mainkanSuaraPanggilan();
     }
+
+    setTimeout(() => {
+      setSedangPanggilAudio(false);
+    }, 12000);
   };
 
   // 8. Muat Data Skrin & Status Bilik (Masa Nyata)
@@ -527,6 +539,7 @@ export default function SkrinTVDewan() {
       } else {
         setPanggilanTerkini(null);
         panggilanTerkiniRef.current = null;
+        setSedangPanggilAudio(false);
       }
 
       // Status Bilik Rawatan
@@ -564,7 +577,7 @@ export default function SkrinTVDewan() {
         setSemuaBilikStatus(bilikKemaskini);
       }
 
-      // Senarai Menunggu
+      // Senarai Menunggu (Ejaan tepat: setSenaraiMenunggu)
       const { data: menungguData } = await supabase
         .from('giliran')
         .select('no_giliran')
@@ -625,6 +638,22 @@ export default function SkrinTVDewan() {
         }
       }}
     >
+      {/* ANIMASI NOMBOR GILIRAN BERKELIP APABILA AUDIO BERKUMANDANG */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes kelipNomborPanggilan {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+            filter: drop-shadow(0 0 25px rgba(250, 204, 21, 0.95));
+          }
+          50% {
+            opacity: 0.18;
+            transform: scale(1.04);
+            filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.25));
+          }
+        }
+      `}} />
+
       <audio ref={audioChimeRef} src="/sounds/chime.mp3" preload="auto" playsInline />
       <audio ref={audioTtsRef} preload="auto" playsInline />
 
@@ -648,6 +677,9 @@ export default function SkrinTVDewan() {
           </div>
         )}
 
+        {/* ========================================================
+            HEADER ATAS (CUACA & TAKWIM SOLAT DIBESARKAN)
+            ======================================================== */}
         <header className={styles.topBar}>
           <div className={styles.clinicBrand}>
             <img src="/logo.png" alt="SyifaLink" className={styles.logoImage} />
@@ -657,20 +689,72 @@ export default function SkrinTVDewan() {
             </div>
           </div>
 
-          <div className={styles.islamicInfoBar}>
-            <div className={styles.weatherWidget}>
-              <CloudSun size={20} />
-              <span>{suhuCuaca} ({statusCuaca})</span>
+          <div className={styles.islamicInfoBar} style={{ gap: '1.25rem' }}>
+            {/* PIL LAPORAN CUACA */}
+            <div 
+              className={styles.weatherWidget}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                padding: '0.55rem 1.05rem',
+                borderRadius: '0.75rem',
+                border: '1.5px solid rgba(56, 189, 248, 0.3)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)'
+              }}
+            >
+              <CloudSun size={26} color="#38bdf8" />
+              <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>
+                {suhuCuaca} ({statusCuaca})
+              </span>
             </div>
 
-            <div className={styles.prayerTimesStrip}>
+            {/* STRIP TAKWIM SOLAT */}
+            <div 
+              className={styles.prayerTimesStrip}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1.15rem',
+                backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                padding: '0.55rem 1.25rem',
+                borderRadius: '0.75rem',
+                border: '1.5px solid rgba(56, 189, 248, 0.3)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)'
+              }}
+            >
               {Object.entries(jadualSolat).map(([namaSolat, waktu]) => (
                 <div
                   key={namaSolat}
                   className={`${styles.prayerItem} ${solatAktif === namaSolat ? styles.prayerActive : ''}`}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '0.45rem',
+                    backgroundColor: solatAktif === namaSolat ? 'rgba(56, 189, 248, 0.18)' : 'transparent'
+                  }}
                 >
-                  <span className={styles.prayerName}>{namaSolat}</span>
-                  <span className={styles.prayerTime}>{formatMasaSolat(waktu)}</span>
+                  <span style={{
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: solatAktif === namaSolat ? '#38bdf8' : '#94a3b8',
+                    letterSpacing: '0.05em'
+                  }}>
+                    {namaSolat}
+                  </span>
+                  <span style={{
+                    fontSize: '1.12rem',
+                    fontWeight: 800,
+                    color: solatAktif === namaSolat ? '#38bdf8' : '#ffffff',
+                    marginTop: '0.1rem',
+                    letterSpacing: '0.02em'
+                  }}>
+                    {formatMasaSolat(waktu)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -684,7 +768,7 @@ export default function SkrinTVDewan() {
 
         <div className={styles.mainLayout}>
           {/* ========================================================
-              BARIS 1 KIRI: SEDANG DIPANGGIL (DITURUNKAN KE BAWAH AGAR SEIMBANG)
+              BARIS 1 KIRI: SEDANG DIPANGGIL
               ======================================================== */}
           <section 
             className={styles.nowSeeingCard}
@@ -692,35 +776,36 @@ export default function SkrinTVDewan() {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingTop: '1.4rem',
-              paddingBottom: '1.4rem',
+              justifyContent: 'flex-start',
+              paddingTop: '1.25rem',
+              paddingBottom: '1.25rem',
               height: '100%',
               boxSizing: 'border-box'
             }}
           >
-            <div className={styles.nowSeeingHeader} style={{ marginBottom: '0.4rem' }}>
+            <div className={styles.nowSeeingHeader} style={{ marginBottom: '0.2rem' }}>
               <span className={styles.nowSeeingTitle}>SEDANG DIPANGGIL</span>
               <span className={styles.nowSeeingSubtitle}>NOMBOR GILIRAN</span>
             </div>
 
             {panggilanTerkini ? (
               <>
-                {/* BLOK NOMBOR & NAMA PESAKIT (DITOLAK KE BAWAH DENGAN MARGIN ATAS) */}
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginTop: '0.85rem',
-                  marginBottom: '1rem',
+                  marginTop: '0.25rem',
+                  marginBottom: '0.65rem',
                   width: '100%'
                 }}>
                   <div 
                     className={styles.activeNumber}
                     style={{
                       lineHeight: 1,
-                      margin: '0 0 0.35rem 0'
+                      margin: '0 0 0.25rem 0',
+                      animation: sedangPanggilAudio ? 'kelipNomborPanggilan 0.65s infinite ease-in-out' : 'none',
+                      transition: 'all 0.2s ease'
                     }}
                   >
                     {panggilanTerkini.noGiliran}
@@ -735,7 +820,7 @@ export default function SkrinTVDewan() {
                       fontSize: '2.2rem',
                       fontWeight: 700,
                       lineHeight: 1.2,
-                      marginTop: '0.2rem',
+                      marginTop: '0.1rem',
                       textShadow: '0 2px 8px rgba(0,0,0,0.4)',
                       maxWidth: '96%',
                       whiteSpace: 'nowrap',
@@ -747,13 +832,12 @@ export default function SkrinTVDewan() {
                   </div>
                 </div>
 
-                {/* KOTAK ARAHAN BILIK (DITOLAK RAPAT KE BAWAH DENGAN marginTop: auto) */}
                 <div 
                   className={styles.proceedBox}
                   style={{
-                    marginTop: 'auto',
-                    marginBottom: '0.35rem',
-                    padding: '1rem 1.25rem',
+                    marginTop: '0.35rem',
+                    marginBottom: '0.75rem',
+                    padding: '1.1rem 1.35rem',
                     width: '100%',
                     display: 'flex',
                     flexDirection: 'column',
@@ -765,10 +849,10 @@ export default function SkrinTVDewan() {
                   <div 
                     className={styles.proceedLabel}
                     style={{
-                      fontSize: '1.2rem',
-                      fontWeight: 600,
+                      fontSize: '1.35rem',
+                      fontWeight: 700,
                       letterSpacing: '0.05em',
-                      marginBottom: '0.2rem'
+                      marginBottom: '0.25rem'
                     }}
                   >
                     Sila Masuk Ke
@@ -780,14 +864,14 @@ export default function SkrinTVDewan() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '0.75rem',
-                      margin: '0.15rem 0'
+                      gap: '0.85rem',
+                      margin: '0.2rem 0'
                     }}
                   >
                     <span 
                       className={styles.roomDestination}
                       style={{
-                        fontSize: '2.85rem',
+                        fontSize: '3.3rem',
                         fontWeight: 900,
                         lineHeight: 1,
                         letterSpacing: '0.02em'
@@ -798,27 +882,29 @@ export default function SkrinTVDewan() {
                     <div 
                       className={styles.arrowCircle}
                       style={{
-                        width: '38px',
-                        height: '38px',
+                        width: '44px',
+                        height: '44px',
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center'
                       }}
                     >
-                      <ArrowRight size={24} strokeWidth={4} />
+                      <ArrowRight size={28} strokeWidth={4} />
                     </div>
                   </div>
 
                   <div 
                     className={styles.perawatName}
                     style={{
-                      fontSize: '1.15rem',
-                      fontWeight: 600,
-                      marginTop: '0.35rem',
-                      letterSpacing: '0.01em'
+                      fontSize: '1.5rem',
+                      fontWeight: 700,
+                      marginTop: '0.45rem',
+                      letterSpacing: '0.02em',
+                      color: '#ffffff',
+                      textShadow: '0 2px 6px rgba(0,0,0,0.35)'
                     }}
                   >
-                    Bersama {panggilanTerkini.namaPerawat}
+                    Bersama <strong style={{ color: '#fef08a' }}>{panggilanTerkini.namaPerawat}</strong>
                   </div>
                 </div>
               </>
@@ -832,20 +918,23 @@ export default function SkrinTVDewan() {
             )}
           </section>
 
-          {/* BARIS 1 KANAN: STATUS 4 BILIK RAWATAN */}
+          {/* ========================================================
+              BARIS 1 KANAN: STATUS BILIK RAWATAN
+              (NAMA BILIK DITUKAR KE WARNA BIRU GELAP PEKAT)
+              ======================================================== */}
           <section className={styles.doctorStatusCard}>
             <div className={styles.doctorStatusHeader}>
-              <span className={styles.doctorStatusTitle}>
-                <Stethoscope size={20} /> STATUS BILIK RAWATAN
+              <span className={styles.doctorStatusTitle} style={{ fontSize: '1.15rem', fontWeight: 800 }}>
+                <Stethoscope size={22} /> STATUS BILIK RAWATAN
               </span>
               {semuaBilikStatus.length > 4 && (
-                <span className={styles.pageIndicatorPill}>
+                <span className={styles.pageIndicatorPill} style={{ fontSize: '0.85rem', fontWeight: 700 }}>
                   Paparan {halamanBilik + 1} / {jumlahHalaman}
                 </span>
               )}
             </div>
 
-            <div className={styles.doctorStatusList}>
+            <div className={styles.doctorStatusList} style={{ gap: '0.85rem' }}>
               {bilikDipaparkan.map((b) => {
                 const adaUstaz = Boolean(b.ustazNama);
                 const sedangAktif = Boolean(b.sedangMerawat);
@@ -854,34 +943,89 @@ export default function SkrinTVDewan() {
                   <div
                     key={b.id}
                     className={`${styles.roomRow} ${sedangAktif ? styles.roomRowBusy : ''}`}
+                    style={{
+                      padding: '0.95rem 1.25rem',
+                      borderRadius: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
                   >
-                    <div className={styles.roomDoctorCol}>
-                      <div className={styles.roomLabelTitle}>{b.namaBilik}</div>
-                      <div className={styles.roomDoctorName}>
+                    {/* NOMBOR BILIK (WARNA BIRU GELAP) & NAMA PERAWAT */}
+                    <div className={styles.roomDoctorCol} style={{ flex: '1 1 auto' }}>
+                      <div 
+                        className={styles.roomLabelTitle}
+                        style={{
+                          fontSize: '1.5rem',
+                          fontWeight: 900,
+                          color: '#0f2942', // WARNA BIRU GELAP PEKAT (JELAS DIBACA)
+                          letterSpacing: '0.03em',
+                          lineHeight: 1.15
+                        }}
+                      >
+                        {b.namaBilik}
+                      </div>
+                      <div 
+                        className={styles.roomDoctorName}
+                        style={{
+                          fontSize: '1.15rem',
+                          fontWeight: 700,
+                          color: adaUstaz ? '#0284c7' : '#64748b',
+                          marginTop: '0.25rem',
+                          letterSpacing: '0.01em'
+                        }}
+                      >
                         {adaUstaz ? b.ustazNama : <span className={styles.rehatText}>Rehat / Kosong</span>}
                       </div>
                     </div>
 
-                    <div className={styles.roomStatusCol}>
+                    {/* STATUS RAWATAN DI BILIK */}
+                    <div className={styles.roomStatusCol} style={{ textAlign: 'right', marginRight: '1rem' }}>
                       {sedangAktif ? (
-                        <span className={styles.statusSeeing}>
-                          <span className={styles.pulseDot}></span>
+                        <span 
+                          className={styles.statusSeeing}
+                          style={{
+                            fontSize: '1.08rem',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.45rem'
+                          }}
+                        >
+                          <span className={styles.pulseDot} style={{ width: '10px', height: '10px' }}></span>
                           {b.statusRawatan === 'dipanggil' ? 'Sedang Dipanggil' : 'Sedang Merawat'} (<strong>{b.noGiliranAktif}</strong>)
                         </span>
                       ) : adaUstaz ? (
-                        <span className={styles.statusAvailable}>Sedia Menerima Pesakit</span>
+                        <span 
+                          className={styles.statusAvailable}
+                          style={{ fontSize: '1.05rem', fontWeight: 700 }}
+                        >
+                          Sedia Menerima Pesakit
+                        </span>
                       ) : (
-                        <span className={styles.statusClosed}>Bilik Tidak Beroperasi</span>
+                        <span 
+                          className={styles.statusClosed}
+                          style={{ fontSize: '1rem', fontWeight: 500, fontStyle: 'italic', opacity: 0.8 }}
+                        >
+                          Bilik Tidak Beroperasi
+                        </span>
                       )}
                     </div>
 
+                    {/* PIL STATUS AKTIF / TERSEDIA / TUTUP */}
                     <div className={styles.roomWaitCol}>
                       {sedangAktif ? (
-                        <div className={styles.badgeBusyPill}>Aktif</div>
+                        <div className={styles.badgeBusyPill} style={{ fontSize: '0.85rem', fontWeight: 800, padding: '0.35rem 0.85rem' }}>
+                          Aktif
+                        </div>
                       ) : adaUstaz ? (
-                        <div className={styles.badgeAvailablePill}>Tersedia</div>
+                        <div className={styles.badgeAvailablePill} style={{ fontSize: '0.85rem', fontWeight: 800, padding: '0.35rem 0.85rem' }}>
+                          Tersedia
+                        </div>
                       ) : (
-                        <div className={styles.badgeClosedPill}>Tutup</div>
+                        <div className={styles.badgeClosedPill} style={{ fontSize: '0.85rem', fontWeight: 700, padding: '0.35rem 0.85rem' }}>
+                          Tutup
+                        </div>
                       )}
                     </div>
                   </div>
@@ -890,15 +1034,17 @@ export default function SkrinTVDewan() {
             </div>
           </section>
 
-          {/* BARIS 2 KIRI: PEMAIN VIDEO TERAPUNG */}
+          {/* ========================================================
+              BARIS 2 KIRI: PEMAIN VIDEO (BEBAS SCREEN HITAM & MERAPAT)
+              ======================================================== */}
           <div style={{
             height: '100%',
             minHeight: '220px',
-            backgroundColor: '#ffffff',
+            backgroundColor: '#022432', // WARNA LATAR SAMA DENGAN TEMA (TIADA KONTRAST HITAM)
             borderRadius: '1.25rem',
             overflow: 'hidden',
-            border: '2px solid #ffffff',
-            boxShadow: '0 20px 35px -8px rgba(13, 148, 136, 0.18), 0 10px 15px -5px rgba(0, 0, 0, 0.06)',
+            border: '2px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
             position: 'relative',
             display: 'flex',
             alignItems: 'center',
@@ -926,7 +1072,7 @@ export default function SkrinTVDewan() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: '#ffffff'
+                  backgroundColor: '#022432'
                 }}>
                   <iframe
                     ref={iframePlayerRef}
@@ -934,11 +1080,12 @@ export default function SkrinTVDewan() {
                     src={janaYouTubeEmbedUrl(videoSemasa.url_video, videoSemasa.loop_tunggal)}
                     title={videoSemasa.tajuk}
                     style={{
-                      width: '104%',
-                      height: '104%',
+                      width: '135%',
+                      height: '135%',
                       border: 'none',
-                      transform: 'scale(1.08)',
-                      transformOrigin: 'center center'
+                      transform: 'scale(1.35)', // ZUM RAPAT SUPAYA SCREEN HITAM KIRI/KANAN TIDAK KELIHATAN
+                      transformOrigin: 'center center',
+                      pointerEvents: 'none'
                     }}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   />
