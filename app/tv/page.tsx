@@ -1,10 +1,10 @@
 // app/tv/page.tsx
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import styles from './tv.module.css';
-import { Volume2, Users, Stethoscope, CloudSun, ArrowRight, X, Film } from 'lucide-react';
+import { Volume2, VolumeX, Users, Stethoscope, CloudSun, ArrowRight, X, Film, Play, Pause } from 'lucide-react';
 
 interface InfoPanggilan {
   id: string;
@@ -42,6 +42,10 @@ export default function SkrinTVDewan() {
   // Status Animasi Berkelip Semasa Suara Berkumandang
   const [sedangPanggilAudio, setSedangPanggilAudio] = useState<boolean>(false);
 
+  // Status Kawalan Manual & Hover Pemain Video
+  const [videoDijedaManual, setVideoDijedaManual] = useState<boolean>(false);
+  const [videoHovered, setVideoHovered] = useState<boolean>(false);
+
   // Cuaca & Waktu Solat
   const [suhuCuaca, setSuhuCuaca] = useState<string>('26°C');
   const [statusCuaca, setStatusCuaca] = useState<string>('Mendung');
@@ -65,11 +69,32 @@ export default function SkrinTVDewan() {
   const [senaraiVideo, setSenaraiVideo] = useState<ItemVideo[]>([]);
   const [videoSemasa, setVideoSemasa] = useState<ItemVideo | null>(null);
 
+  // Ref Sentiasa Terkini
+  const audioDibenarkanRef = useRef<boolean>(false);
+  const videoSemasaRef = useRef<ItemVideo | null>(null);
+  const videoDijedaManualRef = useRef<boolean>(false);
+  const sedangPanggilRef = useRef<boolean>(false);
+  const timerPulihAudioRef = useRef<NodeJS.Timeout | null>(null);
+
   const panggilanTerkiniRef = useRef<string | null>(null);
   const audioChimeRef = useRef<HTMLAudioElement | null>(null);
   const audioTtsRef = useRef<HTMLAudioElement | null>(null);
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
   const iframePlayerRef = useRef<HTMLIFrameElement | null>(null);
+  const wakeLockRef = useRef<any>(null);
+  const btnAktifRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    audioDibenarkanRef.current = audioDibenarkan;
+  }, [audioDibenarkan]);
+
+  useEffect(() => {
+    videoSemasaRef.current = videoSemasa;
+  }, [videoSemasa]);
+
+  useEffect(() => {
+    videoDijedaManualRef.current = videoDijedaManual;
+  }, [videoDijedaManual]);
 
   // Helper Pemformat Waktu Solat
   const formatMasaSolat = (waktu: any): string => {
@@ -112,9 +137,136 @@ export default function SkrinTVDewan() {
     } catch (e) {}
   };
 
-  // 1. Skrin Penuh & Buka Kunci Audio
-  const aktifkanSkrinPenuhDanAudio = () => {
+  // Kekalkan Skrin TV Sentiasa Menyala (Screen Wake Lock untuk Android TV / Smart TV)
+  const aktifkanWakeLock = useCallback(async () => {
+    try {
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    aktifkanWakeLock();
+    const tanganiVisibiliti = () => {
+      if (document.visibilityState === 'visible') {
+        aktifkanWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', tanganiVisibiliti);
+    return () => {
+      document.removeEventListener('visibilitychange', tanganiVisibiliti);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+      }
+    };
+  }, [aktifkanWakeLock]);
+
+  // Helper Kawalan YouTube Iframe
+  const hantarArahanYouTube = useCallback((func: string, args: any[] = []) => {
+    if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
+      iframePlayerRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func, args }),
+        '*'
+      );
+    }
+  }, []);
+
+  // Mulakan & Selaraskan Pemain Video (MP4 & YouTube)
+  const mulaDanSelarasVideo = useCallback(
+    (benarkanBunyi: boolean) => {
+      const videoKini = videoSemasaRef.current;
+      if (!videoKini) return;
+
+      const volPeratus = videoKini.kelantangan_audio ?? 20;
+      const perluMain = !videoDijedaManualRef.current && !sedangPanggilRef.current;
+
+      // 1. Pemain MP4 Terus
+      if (videoPlayerRef.current) {
+        const vid = videoPlayerRef.current;
+        vid.volume = volPeratus / 100;
+        vid.muted = !benarkanBunyi || volPeratus === 0 || sedangPanggilRef.current;
+
+        if (perluMain) {
+          const janjiMain = vid.play();
+          if (janjiMain !== undefined) {
+            janjiMain.catch(() => {
+              vid.muted = true;
+              vid.play().catch(() => {});
+            });
+          }
+        } else {
+          vid.pause();
+        }
+      }
+
+      // 2. Pemain YouTube Embed
+      if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
+        iframePlayerRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'listening', id: 1 }),
+          '*'
+        );
+
+        if (perluMain) {
+          hantarArahanYouTube('playVideo');
+        } else {
+          hantarArahanYouTube('pauseVideo');
+        }
+
+        if (!benarkanBunyi || volPeratus === 0 || sedangPanggilRef.current) {
+          hantarArahanYouTube('mute');
+        } else {
+          hantarArahanYouTube('unMute');
+          hantarArahanYouTube('setVolume', [volPeratus]);
+        }
+      }
+    },
+    [hantarArahanYouTube]
+  );
+
+  // Kawalan Butang Play / Pause Video Manual
+  const togglePlayPauseVideo = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    if (!audioDibenarkanRef.current) {
+      audioDibenarkanRef.current = true;
+      setAudioDibenarkan(true);
+    }
+
+    const statusBaharuDijeda = !videoDijedaManualRef.current;
+    videoDijedaManualRef.current = statusBaharuDijeda;
+    setVideoDijedaManual(statusBaharuDijeda);
+
+    const volPeratus = videoSemasaRef.current?.kelantangan_audio ?? 20;
+
+    if (videoPlayerRef.current) {
+      if (statusBaharuDijeda) {
+        videoPlayerRef.current.pause();
+      } else {
+        videoPlayerRef.current.muted = volPeratus === 0;
+        videoPlayerRef.current.volume = volPeratus / 100;
+        videoPlayerRef.current.play().catch(() => {});
+      }
+    }
+
+    if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
+      if (statusBaharuDijeda) {
+        hantarArahanYouTube('pauseVideo');
+      } else {
+        hantarArahanYouTube('playVideo');
+        if (volPeratus > 0) {
+          hantarArahanYouTube('unMute');
+          hantarArahanYouTube('setVolume', [volPeratus]);
+        }
+      }
+    }
+  };
+
+  // 1. Skrin Penuh & Buka Kunci Audio + Video
+  const aktifkanSkrinPenuhDanAudio = useCallback(() => {
+    audioDibenarkanRef.current = true;
     setAudioDibenarkan(true);
+    aktifkanWakeLock();
 
     if (audioChimeRef.current) {
       audioChimeRef.current.currentTime = 0;
@@ -123,37 +275,65 @@ export default function SkrinTVDewan() {
     }
 
     if (audioTtsRef.current) {
-      audioTtsRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      audioTtsRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
       audioTtsRef.current.play().catch(() => {});
     }
 
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
-        setIsSkrinPenuh(true);
-      }).catch(() => {});
+    mulaDanSelarasVideo(true);
+
+    const docEl = document.documentElement as any;
+    const isFs =
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).msFullscreenElement;
+
+    if (!isFs) {
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().then(() => setIsSkrinPenuh(true)).catch(() => {});
+      } else if (docEl.webkitRequestFullscreen) {
+        try {
+          docEl.webkitRequestFullscreen();
+          setIsSkrinPenuh(true);
+        } catch (e) {}
+      }
     }
 
     if (panggilanTerkini) {
       panggilSuara(panggilanTerkini.noGiliran, panggilanTerkini.bilik, panggilanTerkini.namaPerawat);
     }
-  };
+  }, [aktifkanWakeLock, mulaDanSelarasVideo, panggilanTerkini]);
 
   const keluarSkrinPenuh = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (document.fullscreenElement) {
-      document.exitFullscreen().then(() => {
+    const doc = document as any;
+    if (doc.fullscreenElement && doc.exitFullscreen) {
+      doc.exitFullscreen().then(() => setIsSkrinPenuh(false)).catch(() => {});
+    } else if (doc.webkitFullscreenElement && doc.webkitExitFullscreen) {
+      try {
+        doc.webkitExitFullscreen();
         setIsSkrinPenuh(false);
-      }).catch(() => {});
+      } catch (err) {}
     }
   };
 
   useEffect(() => {
     const semakPerubahanFullscreen = () => {
-      setIsSkrinPenuh(Boolean(document.fullscreenElement));
+      const doc = document as any;
+      setIsSkrinPenuh(Boolean(doc.fullscreenElement || doc.webkitFullscreenElement));
     };
     document.addEventListener('fullscreenchange', semakPerubahanFullscreen);
-    return () => document.removeEventListener('fullscreenchange', semakPerubahanFullscreen);
+    document.addEventListener('webkitfullscreenchange', semakPerubahanFullscreen);
+    return () => {
+      document.removeEventListener('fullscreenchange', semakPerubahanFullscreen);
+      document.removeEventListener('webkitfullscreenchange', semakPerubahanFullscreen);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!audioDibenarkan && btnAktifRef.current) {
+      btnAktifRef.current.focus();
+    }
+  }, [audioDibenarkan]);
 
   // 2. Jam Digital
   useEffect(() => {
@@ -262,113 +442,144 @@ export default function SkrinTVDewan() {
     };
   }, []);
 
-  const tanganiVideoTamat = () => {
-    if (!videoSemasa || senaraiVideo.length === 0) return;
+  const tanganiVideoTamat = useCallback(() => {
+    const videoKini = videoSemasaRef.current;
+    if (!videoKini || senaraiVideo.length === 0) return;
 
-    if (videoSemasa.loop_tunggal) {
+    setVideoDijedaManual(false);
+    videoDijedaManualRef.current = false;
+
+    if (videoKini.loop_tunggal || senaraiVideo.length === 1) {
       if (videoPlayerRef.current) {
         videoPlayerRef.current.currentTime = 0;
         videoPlayerRef.current.play().catch(() => {});
+      } else if (iframePlayerRef.current) {
+        hantarArahanYouTube('seekTo', [0, true]);
+        hantarArahanYouTube('playVideo');
       }
       return;
     }
 
-    if (senaraiVideo.length > 1) {
-      const videoLain = senaraiVideo.filter((v) => v.id !== videoSemasa.id);
-      const videoRawak = videoLain[Math.floor(Math.random() * videoLain.length)];
-      setVideoSemasa(videoRawak);
-    }
-  };
+    const videoLain = senaraiVideo.filter((v) => v.id !== videoKini.id);
+    const videoRawak = videoLain[Math.floor(Math.random() * videoLain.length)];
+    setVideoSemasa(videoRawak);
+  }, [senaraiVideo, hantarArahanYouTube]);
 
   useEffect(() => {
     const tanganiMesejYouTube = (event: MessageEvent) => {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data?.event === 'onStateChange' && data?.info === 0) {
-          tanganiVideoTamat();
+        if (data?.event === 'onStateChange') {
+          if (data.info === 0) {
+            tanganiVideoTamat();
+          } else if (data.info === 1) {
+            setVideoDijedaManual(false);
+            videoDijedaManualRef.current = false;
+          } else if (data.info === 2) {
+            if (!videoDijedaManualRef.current && !sedangPanggilRef.current) {
+              hantarArahanYouTube('playVideo');
+            }
+          }
         }
       } catch (e) {}
     };
 
     window.addEventListener('message', tanganiMesejYouTube);
     return () => window.removeEventListener('message', tanganiMesejYouTube);
-  }, [videoSemasa, senaraiVideo]);
+  }, [tanganiVideoTamat, hantarArahanYouTube]);
 
-  // Aras Kelantangan Video
   useEffect(() => {
     if (!videoSemasa) return;
-    const volPeratus = videoSemasa.kelantangan_audio ?? 20;
+    setVideoDijedaManual(false);
+    videoDijedaManualRef.current = false;
 
-    if (videoPlayerRef.current) {
-      videoPlayerRef.current.volume = volPeratus / 100;
-      videoPlayerRef.current.muted = volPeratus === 0;
-    }
+    mulaDanSelarasVideo(audioDibenarkanRef.current);
 
-    if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
-      const postCmd = (func: string, args: any[] = []) => {
-        iframePlayerRef.current?.contentWindow?.postMessage(
-          JSON.stringify({ event: 'command', func, args }),
-          '*'
-        );
-      };
+    const timer1 = setTimeout(() => mulaDanSelarasVideo(audioDibenarkanRef.current), 1200);
+    const timer2 = setTimeout(() => mulaDanSelarasVideo(audioDibenarkanRef.current), 2800);
 
-      setTimeout(() => {
-        if (volPeratus === 0) {
-          postCmd('mute');
-        } else {
-          postCmd('unMute');
-          postCmd('setVolume', [volPeratus]);
-        }
-      }, 1500);
-    }
-  }, [videoSemasa]);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [videoSemasa, mulaDanSelarasVideo]);
 
-  // Redakan dan Pulihkan Audio Video Latar
-  const redakanAudioVideoLatar = () => {
+  const redakanAudioVideoLatar = useCallback(() => {
     if (videoPlayerRef.current) {
       videoPlayerRef.current.muted = true;
+      videoPlayerRef.current.pause();
     }
-    if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
-      iframePlayerRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: 'command', func: 'mute', args: [] }),
-        '*'
-      );
-    }
-  };
+    hantarArahanYouTube('mute');
+    hantarArahanYouTube('pauseVideo');
+  }, [hantarArahanYouTube]);
 
-  const pulihkanAudioVideoLatar = () => {
-    setTimeout(() => {
-      const volPeratus = videoSemasa?.kelantangan_audio ?? 20;
+  const pulihkanAudioVideoLatar = useCallback(() => {
+    if (timerPulihAudioRef.current) {
+      clearTimeout(timerPulihAudioRef.current);
+      timerPulihAudioRef.current = null;
+    }
+
+    sedangPanggilRef.current = false;
+    setSedangPanggilAudio(false);
+
+    const laksanaPulih = () => {
+      const volPeratus = videoSemasaRef.current?.kelantangan_audio ?? 20;
+      const bolehBunyi = audioDibenarkanRef.current && volPeratus > 0;
+      const perluMain = !videoDijedaManualRef.current;
+
       if (videoPlayerRef.current) {
-        videoPlayerRef.current.muted = volPeratus === 0;
-        videoPlayerRef.current.volume = volPeratus / 100;
+        const vid = videoPlayerRef.current;
+        vid.muted = !bolehBunyi;
+        vid.volume = volPeratus / 100;
+        if (perluMain) {
+          vid.play().catch(() => {
+            vid.muted = true;
+            vid.play().catch(() => {});
+          });
+        }
       }
-      if (iframePlayerRef.current && iframePlayerRef.current.contentWindow && volPeratus > 0) {
-        iframePlayerRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'unMute', args: [] }),
-          '*'
-        );
-        iframePlayerRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'setVolume', args: [volPeratus] }),
-          '*'
-        );
+
+      if (iframePlayerRef.current && iframePlayerRef.current.contentWindow) {
+        if (perluMain) {
+          hantarArahanYouTube('playVideo');
+        }
+        if (bolehBunyi) {
+          hantarArahanYouTube('unMute');
+          hantarArahanYouTube('setVolume', [volPeratus]);
+        } else {
+          hantarArahanYouTube('mute');
+        }
       }
-    }, 1000);
-  };
+    };
+
+    setTimeout(laksanaPulih, 350);
+    setTimeout(laksanaPulih, 950);
+  }, [hantarArahanYouTube]);
 
   const janaYouTubeEmbedUrl = (url: string, loop: boolean) => {
     let videoId = '';
-    if (url.includes('youtu.be/')) {
-      videoId = url.split('youtu.be/')[1]?.split('?')[0];
-    } else if (url.includes('watch?v=')) {
-      videoId = url.split('watch?v=')[1]?.split('&')[0];
-    } else if (url.includes('embed/')) {
-      videoId = url.split('embed/')[1]?.split('?')[0];
-    }
+    try {
+      if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split(/[?&]/)[0];
+      } else if (url.includes('watch?v=')) {
+        videoId = url.split('watch?v=')[1]?.split(/[?&]/)[0];
+      } else if (url.includes('embed/')) {
+        videoId = url.split('embed/')[1]?.split(/[?&]/)[0];
+      } else if (url.includes('shorts/')) {
+        videoId = url.split('shorts/')[1]?.split(/[?&]/)[0];
+      } else if (url.includes('live/')) {
+        videoId = url.split('live/')[1]?.split(/[?&]/)[0];
+      }
+    } catch (e) {}
 
     if (!videoId) return url;
 
-    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&enablejsapi=1${
+    const originParam =
+      typeof window !== 'undefined' && window.location?.origin
+        ? `&origin=${encodeURIComponent(window.location.origin)}`
+        : '';
+
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&enablejsapi=1${originParam}${
       loop ? `&loop=1&playlist=${videoId}` : ''
     }`;
   };
@@ -416,74 +627,75 @@ export default function SkrinTVDewan() {
     return ayat;
   };
 
-  const panggilSuara = (noGiliran: string, bilik: string, namaPerawat: string) => {
-    redakanAudioVideoLatar();
-    setSedangPanggilAudio(true);
+  const panggilSuara = useCallback(
+    (noGiliran: string, bilik: string, namaPerawat: string) => {
+      sedangPanggilRef.current = true;
+      setSedangPanggilAudio(true);
+      redakanAudioVideoLatar();
 
-    const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
-    const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
+      if (timerPulihAudioRef.current) clearTimeout(timerPulihAudioRef.current);
+      timerPulihAudioRef.current = setTimeout(() => {
+        pulihkanAudioVideoLatar();
+      }, 11000);
 
-    if (audioTtsRef.current) {
-      audioTtsRef.current.src = audioUrl;
-      audioTtsRef.current.load();
-    }
-
-    let suaraSudahMula = false;
-    const mainkanSuaraPanggilan = () => {
-      if (suaraSudahMula) return;
-      suaraSudahMula = true;
+      const ayatSebutan = janaTeksSebutanMelayu(noGiliran, bilik, namaPerawat);
+      const audioUrl = `/api/tts?text=${encodeURIComponent(ayatSebutan)}`;
 
       if (audioTtsRef.current) {
-        audioTtsRef.current.volume = 1.0;
-        audioTtsRef.current.onended = () => {
-          setSedangPanggilAudio(false);
-          pulihkanAudioVideoLatar();
-        };
-        audioTtsRef.current.onerror = () => {
-          setSedangPanggilAudio(false);
-          pulihkanAudioVideoLatar();
-        };
-
-        const playPromise = audioTtsRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            setSedangPanggilAudio(false);
-            pulihkanAudioVideoLatar();
-          });
-        }
-      } else {
-        setSedangPanggilAudio(false);
-        pulihkanAudioVideoLatar();
+        audioTtsRef.current.src = audioUrl;
+        audioTtsRef.current.load();
       }
-    };
 
-    if (audioChimeRef.current) {
-      audioChimeRef.current.currentTime = 0;
-      audioChimeRef.current.volume = 1.0;
+      let suaraSudahMula = false;
+      const mainkanSuaraPanggilan = () => {
+        if (suaraSudahMula) return;
+        suaraSudahMula = true;
 
-      audioChimeRef.current.onended = () => {
-        setTimeout(mainkanSuaraPanggilan, 350);
+        if (audioTtsRef.current) {
+          audioTtsRef.current.volume = 1.0;
+          audioTtsRef.current.onended = () => {
+            pulihkanAudioVideoLatar();
+          };
+          audioTtsRef.current.onerror = () => {
+            pulihkanAudioVideoLatar();
+          };
+
+          const playPromise = audioTtsRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(() => {
+              pulihkanAudioVideoLatar();
+            });
+          }
+        } else {
+          pulihkanAudioVideoLatar();
+        }
       };
 
-      const playChime = audioChimeRef.current.play();
-      if (playChime !== undefined) {
-        playChime.catch(() => {
-          setTimeout(mainkanSuaraPanggilan, 500);
-        });
+      if (audioChimeRef.current) {
+        audioChimeRef.current.currentTime = 0;
+        audioChimeRef.current.volume = 1.0;
+
+        audioChimeRef.current.onended = () => {
+          setTimeout(mainkanSuaraPanggilan, 350);
+        };
+
+        const playChime = audioChimeRef.current.play();
+        if (playChime !== undefined) {
+          playChime.catch(() => {
+            setTimeout(mainkanSuaraPanggilan, 500);
+          });
+        }
+
+        setTimeout(mainkanSuaraPanggilan, 2600);
+      } else {
+        mainkanSuaraPanggilan();
       }
-
-      setTimeout(mainkanSuaraPanggilan, 2600);
-    } else {
-      mainkanSuaraPanggilan();
-    }
-
-    setTimeout(() => {
-      setSedangPanggilAudio(false);
-    }, 12000);
-  };
+    },
+    [redakanAudioVideoLatar, pulihkanAudioVideoLatar]
+  );
 
   // 8. Muat Data Skrin & Status Bilik (Masa Nyata)
-  const muatDataSkrin = async () => {
+  const muatDataSkrin = useCallback(async () => {
     try {
       const { data: bilikData } = await supabase
         .from('bilik_rawatan')
@@ -539,10 +751,11 @@ export default function SkrinTVDewan() {
       } else {
         setPanggilanTerkini(null);
         panggilanTerkiniRef.current = null;
-        setSedangPanggilAudio(false);
+        if (sedangPanggilRef.current) {
+          pulihkanAudioVideoLatar();
+        }
       }
 
-      // Status Bilik Rawatan
       if (bilikData) {
         const bilikKemaskini = bilikData.map((b) => {
           const perawatBilik =
@@ -577,7 +790,6 @@ export default function SkrinTVDewan() {
         setSemuaBilikStatus(bilikKemaskini);
       }
 
-      // Senarai Menunggu (Ejaan tepat: setSenaraiMenunggu)
       const { data: menungguData } = await supabase
         .from('giliran')
         .select('no_giliran')
@@ -591,7 +803,7 @@ export default function SkrinTVDewan() {
     } catch (err) {
       console.error('Ralat kemaskini TV:', err);
     }
-  };
+  }, [panggilSuara, pulihkanAudioVideoLatar]);
 
   useEffect(() => {
     muatDataSkrin();
@@ -609,9 +821,9 @@ export default function SkrinTVDewan() {
       clearInterval(intervalPoll);
       supabase.removeChannel(saluran);
     };
-  }, []);
+  }, [muatDataSkrin]);
 
-  // 9. Penggiliran Paparan Bilik
+  // 9. Penggiliran Paparan Bilik & Kawalan Remote TV
   const jumlahHalaman = Math.max(1, Math.ceil(semuaBilikStatus.length / 4));
 
   useEffect(() => {
@@ -627,18 +839,53 @@ export default function SkrinTVDewan() {
     return () => clearInterval(timerCarousel);
   }, [semuaBilikStatus.length, jumlahHalaman]);
 
+  useEffect(() => {
+    const tanganiRemoteTV = (e: KeyboardEvent) => {
+      if (e.key === 'MediaPlayPause' || e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        togglePlayPauseVideo();
+      } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+        if (!audioDibenarkanRef.current) {
+          e.preventDefault();
+          aktifkanSkrinPenuhDanAudio();
+        }
+      } else if (e.key === 'ArrowRight' || e.keyCode === 39) {
+        if (jumlahHalaman > 1) {
+          setHalamanBilik((prev) => (prev + 1) % jumlahHalaman);
+        }
+      } else if (e.key === 'ArrowLeft' || e.keyCode === 37) {
+        if (jumlahHalaman > 1) {
+          setHalamanBilik((prev) => (prev - 1 + jumlahHalaman) % jumlahHalaman);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', tanganiRemoteTV);
+    return () => window.removeEventListener('keydown', tanganiRemoteTV);
+  }, [aktifkanSkrinPenuhDanAudio, jumlahHalaman]);
+
   const bilikDipaparkan = semuaBilikStatus.slice(halamanBilik * 4, (halamanBilik + 1) * 4);
+  const isVideoMp4 = Boolean(
+    videoSemasa && (videoSemasa.jenis === 'mp4' || videoSemasa.url_video.toLowerCase().includes('.mp4'))
+  );
 
   return (
     <div
       className={styles.tvContainer}
+      style={{
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        userSelect: 'none',
+        WebkitUserSelect: 'none'
+      }}
       onClick={() => {
-        if (!audioDibenarkan) {
+        if (!audioDibenarkanRef.current) {
           aktifkanSkrinPenuhDanAudio();
         }
       }}
     >
-      {/* ANIMASI NOMBOR GILIRAN BERKELIP APABILA AUDIO BERKUMANDANG */}
+      {/* ANIMASI NOMBOR GILIRAN BERKELIP, FOKUS REMOTE TV & HOVER TAG VIDEO */}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes kelipNomborPanggilan {
           0%, 100% {
@@ -652,6 +899,24 @@ export default function SkrinTVDewan() {
             filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.25));
           }
         }
+        .tv-remote-focus:focus {
+          outline: 3px solid #facc15 !important;
+          outline-offset: 3px !important;
+          box-shadow: 0 0 20px rgba(250, 204, 21, 0.7) !important;
+        }
+        .video-box-hover-zone .video-bottom-bar {
+          opacity: 0;
+          visibility: hidden;
+          transform: translateY(6px);
+          transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
+        }
+        .video-box-hover-zone:hover .video-bottom-bar,
+        .video-box-hover-zone:focus-within .video-bottom-bar,
+        .video-box-hover-zone.is-hovered .video-bottom-bar {
+          opacity: 1;
+          visibility: visible;
+          transform: translateY(0);
+        }
       `}} />
 
       <audio ref={audioChimeRef} src="/sounds/chime.mp3" preload="auto" playsInline />
@@ -659,8 +924,9 @@ export default function SkrinTVDewan() {
 
       <div className={styles.exitZone}>
         <button
+          type="button"
           onClick={keluarSkrinPenuh}
-          className={styles.btnExitFullscreen}
+          className={`${styles.btnExitFullscreen} tv-remote-focus`}
           title="Keluar dari Mod Skrin Penuh"
         >
           <X size={20} strokeWidth={2.5} />
@@ -670,22 +936,29 @@ export default function SkrinTVDewan() {
       <div className={styles.contentWrapper}>
         {!audioDibenarkan && (
           <div className={styles.audioBanner}>
-            <span>Sila klik butang di sebelah untuk membenarkan loceng dan suara panggilan TV dewan.</span>
-            <button onClick={aktifkanSkrinPenuhDanAudio} className={styles.btnEnableAudio}>
-              Aktifkan Suara Panggilan & Skrin Penuh
+            <span>Tekan <strong>OK</strong> pada Remote TV atau klik butang di sebelah untuk mengaktifkan suara &amp; video TV.</span>
+            <button
+              ref={btnAktifRef}
+              type="button"
+              autoFocus
+              tabIndex={0}
+              onClick={aktifkanSkrinPenuhDanAudio}
+              className={`${styles.btnEnableAudio} tv-remote-focus`}
+            >
+              Aktifkan Suara Panggilan &amp; Skrin Penuh
             </button>
           </div>
         )}
 
         {/* ========================================================
-            HEADER ATAS (CUACA & TAKWIM SOLAT DIBESARKAN)
+            HEADER ATAS (CUACA & TAKWIM SOLAT)
             ======================================================== */}
         <header className={styles.topBar}>
           <div className={styles.clinicBrand}>
             <img src="/logo.png" alt="SyifaLink" className={styles.logoImage} />
             <div>
               <span className={styles.welcomeText}>Selamat Datang ke</span>
-              <h1 className={styles.clinicTitleText}>Pusat Rawatan Islam Darul Syifa'</h1>
+              <h1 className={styles.clinicTitleText}>Pusat Rawatan Islam Darul Syifa&apos;</h1>
             </div>
           </div>
 
@@ -697,7 +970,7 @@ export default function SkrinTVDewan() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.65rem',
-                backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                backgroundColor: 'rgba(15, 23, 42, 0.85)',
                 padding: '0.55rem 1.05rem',
                 borderRadius: '0.75rem',
                 border: '1.5px solid rgba(56, 189, 248, 0.3)',
@@ -717,7 +990,7 @@ export default function SkrinTVDewan() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '1.15rem',
-                backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                backgroundColor: 'rgba(15, 23, 42, 0.85)',
                 padding: '0.55rem 1.25rem',
                 borderRadius: '0.75rem',
                 border: '1.5px solid rgba(56, 189, 248, 0.3)',
@@ -920,7 +1193,6 @@ export default function SkrinTVDewan() {
 
           {/* ========================================================
               BARIS 1 KANAN: STATUS BILIK RAWATAN
-              (NAMA BILIK DITUKAR KE WARNA BIRU GELAP PEKAT)
               ======================================================== */}
           <section className={styles.doctorStatusCard}>
             <div className={styles.doctorStatusHeader}>
@@ -951,14 +1223,13 @@ export default function SkrinTVDewan() {
                       justifyContent: 'space-between'
                     }}
                   >
-                    {/* NOMBOR BILIK (WARNA BIRU GELAP) & NAMA PERAWAT */}
                     <div className={styles.roomDoctorCol} style={{ flex: '1 1 auto' }}>
                       <div 
                         className={styles.roomLabelTitle}
                         style={{
                           fontSize: '1.5rem',
                           fontWeight: 900,
-                          color: '#0f2942', // WARNA BIRU GELAP PEKAT (JELAS DIBACA)
+                          color: '#0f2942',
                           letterSpacing: '0.03em',
                           lineHeight: 1.15
                         }}
@@ -979,7 +1250,6 @@ export default function SkrinTVDewan() {
                       </div>
                     </div>
 
-                    {/* STATUS RAWATAN DI BILIK */}
                     <div className={styles.roomStatusCol} style={{ textAlign: 'right', marginRight: '1rem' }}>
                       {sedangAktif ? (
                         <span 
@@ -1012,7 +1282,6 @@ export default function SkrinTVDewan() {
                       )}
                     </div>
 
-                    {/* PIL STATUS AKTIF / TERSEDIA / TUTUP */}
                     <div className={styles.roomWaitCol}>
                       {sedangAktif ? (
                         <div className={styles.badgeBusyPill} style={{ fontSize: '0.85rem', fontWeight: 800, padding: '0.35rem 0.85rem' }}>
@@ -1035,33 +1304,61 @@ export default function SkrinTVDewan() {
           </section>
 
           {/* ========================================================
-              BARIS 2 KIRI: PEMAIN VIDEO (BEBAS SCREEN HITAM & MERAPAT)
+              BARIS 2 KIRI: PEMAIN VIDEO (RAPAT TANPA JIDAR HITAM & TAG HOVER BAWAH)
               ======================================================== */}
-          <div style={{
-            height: '100%',
-            minHeight: '220px',
-            backgroundColor: '#022432', // WARNA LATAR SAMA DENGAN TEMA (TIADA KONTRAST HITAM)
-            borderRadius: '1.25rem',
-            overflow: 'hidden',
-            border: '2px solid rgba(255, 255, 255, 0.15)',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s ease'
-          }}>
+          <div
+            className={`video-box-hover-zone ${videoHovered ? 'is-hovered' : ''}`}
+            onMouseEnter={() => setVideoHovered(true)}
+            onMouseLeave={() => setVideoHovered(false)}
+            style={{
+              height: '100%',
+              minHeight: '220px',
+              backgroundColor: '#022432',
+              borderRadius: '1.25rem',
+              overflow: 'hidden',
+              border: '2px solid rgba(255, 255, 255, 0.15)',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
             {videoSemasa ? (
-              videoSemasa.jenis === 'mp4' || videoSemasa.url_video.endsWith('.mp4') ? (
+              isVideoMp4 ? (
                 <video
                   ref={videoPlayerRef}
                   key={videoSemasa.id}
                   src={videoSemasa.url_video}
                   autoPlay
+                  muted={!audioDibenarkan || videoSemasa.kelantangan_audio === 0}
                   playsInline
-                  loop={videoSemasa.loop_tunggal}
+                  preload="auto"
+                  loop={videoSemasa.loop_tunggal || senaraiVideo.length === 1}
+                  onLoadedData={() => mulaDanSelarasVideo(audioDibenarkanRef.current)}
+                  onCanPlay={() => mulaDanSelarasVideo(audioDibenarkanRef.current)}
+                  onPlay={() => {
+                    setVideoDijedaManual(false);
+                    videoDijedaManualRef.current = false;
+                  }}
+                  onPause={() => {
+                    if (!sedangPanggilRef.current) {
+                      setVideoDijedaManual(true);
+                      videoDijedaManualRef.current = true;
+                    }
+                  }}
                   onEnded={tanganiVideoTamat}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={() => {
+                    setTimeout(tanganiVideoTamat, 2000);
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                    pointerEvents: 'auto',
+                    transform: 'translateZ(0)'
+                  }}
                 />
               ) : (
                 <div style={{
@@ -1069,25 +1366,32 @@ export default function SkrinTVDewan() {
                   height: '100%',
                   overflow: 'hidden',
                   position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                   backgroundColor: '#022432'
                 }}>
                   <iframe
                     ref={iframePlayerRef}
                     key={videoSemasa.id}
-                    src={janaYouTubeEmbedUrl(videoSemasa.url_video, videoSemasa.loop_tunggal)}
+                    src={janaYouTubeEmbedUrl(
+                      videoSemasa.url_video,
+                      videoSemasa.loop_tunggal || senaraiVideo.length === 1
+                    )}
                     title={videoSemasa.tajuk}
-                    style={{
-                      width: '135%',
-                      height: '135%',
-                      border: 'none',
-                      transform: 'scale(1.35)', // ZUM RAPAT SUPAYA SCREEN HITAM KIRI/KANAN TIDAK KELIHATAN
-                      transformOrigin: 'center center',
-                      pointerEvents: 'none'
+                    onLoad={() => {
+                      mulaDanSelarasVideo(audioDibenarkanRef.current);
+                      setTimeout(() => mulaDanSelarasVideo(audioDibenarkanRef.current), 1000);
                     }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      width: '106%',
+                      height: '152%',
+                      transform: 'translate(-50%, -50%)',
+                      border: 'none',
+                      pointerEvents: 'auto'
+                    }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowFullScreen
                   />
                 </div>
               )
@@ -1108,35 +1412,124 @@ export default function SkrinTVDewan() {
               </div>
             )}
 
+            {/* BAR TAG & KAWALAN DI BAWAH (TERSEMBUNYI SEHINGGA KURSOR DILETAKKAN) */}
             {videoSemasa && (
-              <div style={{
-                position: 'absolute',
-                bottom: '10px',
-                left: '10px',
-                backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                padding: '0.3rem 0.75rem',
-                borderRadius: '0.5rem',
-                fontSize: '0.74rem',
-                fontWeight: 700,
-                color: '#ffffff',
-                maxWidth: '85%',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                pointerEvents: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.45rem',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                border: '1px solid rgba(255,255,255,0.18)'
-              }}>
-                <Film size={13} color="#38bdf8" />
-                <span>{videoSemasa.tajuk}</span>
-                <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
-                  • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
-                </span>
+              <div
+                className="video-bottom-bar"
+                style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  left: '10px',
+                  right: '10px',
+                  zIndex: 30,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.5rem',
+                  pointerEvents: 'none'
+                }}
+              >
+                {/* TAG TAJUK VIDEO (KIRI BAWAH) */}
+                <div
+                  style={{
+                    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: '0.5rem',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    color: '#ffffff',
+                    maxWidth: '65%',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                  }}
+                >
+                  <Film size={13} color="#38bdf8" />
+                  <span>{videoSemasa.tajuk}</span>
+                  <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
+                    • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
+                  </span>
+                </div>
+
+                {/* BUTANG MAIN / JEDA & AUDIO (KANAN BAWAH) */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    pointerEvents: 'auto'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={togglePlayPauseVideo}
+                    className="tv-remote-focus"
+                    title={videoDijedaManual ? 'Mainkan Video (Play)' : 'Jedakan Video (Pause)'}
+                    style={{
+                      backgroundColor: 'rgba(15, 23, 42, 0.88)',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      borderRadius: '0.5rem',
+                      padding: '0.35rem 0.7rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                    }}
+                  >
+                    {videoDijedaManual ? (
+                      <>
+                        <Play size={14} color="#34d399" /> Main
+                      </>
+                    ) : (
+                      <>
+                        <Pause size={14} color="#fbbf24" /> Jeda
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!audioDibenarkanRef.current) {
+                        aktifkanSkrinPenuhDanAudio();
+                      } else {
+                        mulaDanSelarasVideo(true);
+                      }
+                    }}
+                    className="tv-remote-focus"
+                    title="Pulihkan Audio Video"
+                    style={{
+                      backgroundColor: 'rgba(15, 23, 42, 0.88)',
+                      color: '#38bdf8',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      borderRadius: '0.5rem',
+                      padding: '0.35rem 0.55rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                    }}
+                  >
+                    {audioDibenarkan && (videoSemasa.kelantangan_audio ?? 20) > 0 ? (
+                      <Volume2 size={15} />
+                    ) : (
+                      <VolumeX size={15} color="#f87171" />
+                    )}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1166,7 +1559,13 @@ export default function SkrinTVDewan() {
       </div>
 
       <footer className={styles.tickerFooter}>
-        <div className={styles.tickerTrack}>
+        <div
+          className={styles.tickerTrack}
+          style={{
+            willChange: 'transform',
+            transform: 'translate3d(0, 0, 0)'
+          }}
+        >
           {[...senaraiTicker, ...senaraiTicker].map((item, idx) => (
             <div key={idx} className={styles.tickerItem}>
               {item.teks_arab && <span className={styles.arabicText}>۞ {item.teks_arab}</span>}
@@ -1175,7 +1574,7 @@ export default function SkrinTVDewan() {
                   {item.kategori === 'promosi' ? '★ PROMOSI' : '✦ MAKLUMAN'}
                 </span>
               )}
-              <span className={styles.translationText}>"{item.teks_maksud}"</span>
+              <span className={styles.translationText}>&quot;{item.teks_maksud}&quot;</span>
               {item.rujukan && <span className={styles.surahRef}>({item.rujukan})</span>}
             </div>
           ))}

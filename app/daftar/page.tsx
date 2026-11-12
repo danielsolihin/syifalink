@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Search, 
@@ -11,7 +11,8 @@ import {
   RefreshCw, 
   Stethoscope, 
   Sparkles,
-  Printer
+  Printer,
+  CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -53,6 +54,7 @@ export default function PendaftaranKiosk() {
 
   const [memproses, setMemproses] = useState(false);
   const [tiketSelesai, setTiketSelesai] = useState<any | null>(null);
+  const timerTutupRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Muat Senarai Perawat Aktif
   useEffect(() => {
@@ -72,6 +74,11 @@ export default function PendaftaranKiosk() {
   }, []);
 
   const semakSemula = () => {
+    if (timerTutupRef.current) {
+      clearTimeout(timerTutupRef.current);
+      timerTutupRef.current = null;
+    }
+    setTiketSelesai(null);
     setStatusSemakan('mula');
     setPesakitDitemui(null);
     setCarianIC('');
@@ -84,42 +91,207 @@ export default function PendaftaranKiosk() {
     setPilihTabibKhusus(false);
   };
 
-  // 2. Kitaran Cetakan & Penutupan Automatik (Auto-Print & Auto-Dismiss)
-  useEffect(() => {
-    if (tiketSelesai) {
-      // Fungsi untuk menutup tiket dan mengosongkan borang
-      const tutupTiketAutomatik = () => {
-        setTimeout(() => {
-          setTiketSelesai(null);
-          semakSemula();
-        }, 1200);
-      };
+  // Sediakan iframe cetakan lebih awal semasa klik supaya kekal terikat dengan interaksi pengguna
+  const sediakanIframeCetak = (): HTMLIFrameElement | null => {
+    if (typeof document === 'undefined') return null;
 
-      // Dikesan sebaik sahaja printer selesai mencetak / dialog cetak ditutup
-      window.addEventListener('afterprint', tutupTiketAutomatik);
-
-      // Picu cetakan printer serta-merta
-      const timerPrint = setTimeout(() => {
-        try {
-          window.print();
-        } catch (err) {
-          console.error('Ralat cetakan:', err);
-        }
-      }, 350);
-
-      // Sandaran keselamatan: Tiket tetap akan hilang secara automatik selepas 6 saat
-      const timerFailsafe = setTimeout(() => {
-        setTiketSelesai(null);
-        semakSemula();
-      }, 6000);
-
-      return () => {
-        window.removeEventListener('afterprint', tutupTiketAutomatik);
-        clearTimeout(timerPrint);
-        clearTimeout(timerFailsafe);
-      };
+    const iframeLama = document.getElementById('iframeCetakThermal');
+    if (iframeLama) {
+      iframeLama.remove();
     }
-  }, [tiketSelesai]);
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'iframeCetakThermal';
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '48mm';
+    iframe.style.height = '130mm';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0.01';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+    return iframe;
+  };
+
+  // 2. Fungsi Cetakan Terus Thermal 58mm (Teks Tengah & Saiz Besar)
+  const cetakResitThermal = (tiket: any, iframeSediaAda?: HTMLIFrameElement | null) => {
+    if (!tiket || typeof document === 'undefined') return;
+
+    try {
+      const iframe = iframeSediaAda || sediakanIframeCetak();
+      if (!iframe) return;
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return;
+
+      const htmlResit = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Tiket ${tiket.no_giliran}</title>
+          <style>
+            @page {
+              size: 58mm auto;
+              margin: 0mm;
+            }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+            html, body {
+              width: 46mm;
+              max-width: 46mm;
+              background: #ffffff;
+              color: #000000;
+              font-family: Arial, Helvetica, sans-serif;
+              margin: 0;
+              padding: 0;
+              overflow-x: hidden;
+            }
+            .resit-wrapper {
+              width: 43mm;
+              max-width: 43mm;
+              margin-left: 0mm;
+              margin-right: auto;
+              padding: 1.5mm 1mm 0mm 1mm;
+              text-align: center;
+            }
+            .tajuk {
+              font-size: 11px;
+              font-weight: 900;
+              line-height: 1.2;
+              text-transform: uppercase;
+              margin-bottom: 2px;
+              text-align: center;
+            }
+            .subtajuk {
+              font-size: 9px;
+              font-weight: 700;
+              margin-bottom: 4px;
+              text-align: center;
+              letter-spacing: 0.03em;
+            }
+            .nombor-utama {
+              font-size: 38px;
+              font-weight: 900;
+              line-height: 1.05;
+              margin: 2px 0 6px 0;
+              text-align: center;
+              letter-spacing: -0.5px;
+            }
+            .kotak-wheelchair {
+              border: 1.5px dashed #000000;
+              padding: 3px 3px;
+              font-size: 8.5px;
+              font-weight: 800;
+              margin-bottom: 5px;
+              text-align: center;
+              word-break: break-word;
+            }
+            .maklumat {
+              border-top: 1px dashed #000000;
+              border-bottom: 1px dashed #000000;
+              padding: 5px 0;
+              margin-bottom: 5px;
+              font-size: 10px;
+              line-height: 1.35;
+              text-align: center;
+            }
+            .baris {
+              margin-bottom: 2.5px;
+              text-align: center;
+              word-break: break-word;
+            }
+            .kotak-sebelum {
+              border: 1.5px solid #000000;
+              padding: 5px 3px;
+              margin-bottom: 5px;
+              text-align: center;
+            }
+            .label-kecil {
+              font-size: 9px;
+              font-weight: 700;
+              text-align: center;
+            }
+            .nombor-sebelum {
+              font-size: 20px;
+              font-weight: 900;
+              margin: 2px 0;
+              text-align: center;
+            }
+            .nota {
+              font-size: 8.5px;
+              font-weight: 700;
+              line-height: 1.25;
+              text-align: center;
+            }
+            .penutup {
+              font-size: 8.5px;
+              font-weight: 700;
+              line-height: 1.3;
+              margin-top: 4px;
+              text-align: center;
+            }
+            .suapan-kertas {
+              height: 24mm;
+              padding-top: 16mm;
+              font-size: 7px;
+              text-align: center;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="resit-wrapper">
+            <div class="tajuk">PUSAT RAWATAN ISLAM<br/>DARUL SYIFA'</div>
+            <div class="subtajuk">SLIP GILIRAN RASMI</div>
+            <div class="nombor-utama">${tiket.no_giliran}</div>
+            ${
+              tiket.perlu_kerusi_roda
+                ? `<div class="kotak-wheelchair">KERUSI RODA: ${tiket.no_plat_kereta || 'Drop-Off'}</div>`
+                : ''
+            }
+            <div class="maklumat">
+              <div class="baris">Nama: <strong>${tiket.nama}</strong></div>
+              ${tiket.perawat_nama ? `<div class="baris">Tabib: <strong>${tiket.perawat_nama}</strong></div>` : ''}
+              <div class="baris">Bilik: <strong>${tiket.lokasi}</strong></div>
+              <div class="baris">Tarikh: <strong>${tiket.tarikh}</strong></div>
+              <div class="baris">Masa: <strong>${tiket.masa}</strong></div>
+            </div>
+            <div class="kotak-sebelum">
+              <div class="label-kecil">No. Terkini Sebelum Anda:</div>
+              <div class="nombor-sebelum">${tiket.no_terkini_sebelum}</div>
+              <div class="nota">Sila nantikan panggilan di ruang menunggu.</div>
+            </div>
+            <div class="penutup">Terima Kasih &amp;<br/>Selamat Menjalani Rawatan</div>
+            <div class="suapan-kertas">------------------------<br/>.</div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      doc.open();
+      doc.write(htmlResit);
+      doc.close();
+
+      if (iframe.contentWindow) {
+        iframe.contentWindow.onafterprint = () => {
+          setTimeout(() => {
+            semakSemula();
+          }, 600);
+        };
+
+        requestAnimationFrame(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        });
+      }
+    } catch (err) {
+      console.error('Ralat penyediaan slip cetakan:', err);
+    }
+  };
 
   // 3. Semak No. IC Sahaja
   const tanganiSemakan = async (e: React.FormEvent) => {
@@ -166,13 +338,15 @@ export default function PendaftaranKiosk() {
     }
   };
 
-  // 4. Proses Pendaftaran Giliran
+  // 4. Proses Pendaftaran Giliran & Auto-Print Serta-Merta
   const prosesDaftarDanAutoAksi = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!nama.trim() || !noIC.trim() || !noTelefon.trim()) {
       alert('Sila pastikan Nama, No. Kad Pengenalan dan No. Telefon telah lengkap.');
       return;
     }
+
+    const iframeCetak = sediakanIframeCetak();
 
     setMemproses(true);
     try {
@@ -228,12 +402,18 @@ export default function PendaftaranKiosk() {
         }
       }
 
-      // Jana Nombor Giliran Hari Ini
-      const tarikhHariIni = new Date().toISOString().split('T')[0];
+      // Jana Nombor Giliran Hari Ini mengikut Zon Masa Malaysia (GMT+8)
+      const tarikhHariIniMY = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kuala_Lumpur',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
       const { count } = await supabase
         .from('giliran')
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', `${tarikhHariIni}T00:00:00`);
+        .gte('created_at', `${tarikhHariIniMY}T00:00:00+08:00`);
 
       const turutan = (count || 0) + 1;
       const noGiliranJana = `K-${String(turutan).padStart(3, '0')}`;
@@ -270,19 +450,39 @@ export default function PendaftaranKiosk() {
 
       if (errGiliran) throw errGiliran;
 
-      // Paparkan Tiket
-      setTiketSelesai({
+      const dataTiketBaharu = {
         no_giliran: noGiliranJana,
         nama: nama.trim(),
         no_telefon: noTelefon.trim(),
         perawat_id: targetPerawatId,
         perawat_nama: ustazObj ? ustazObj.nama : null,
         lokasi: ustazObj ? ustazObj.no_bilik : 'Diumumkan di Skrin TV',
-        masa: new Date().toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' }),
+        masa: new Date().toLocaleTimeString('ms-MY', {
+          timeZone: 'Asia/Kuala_Lumpur',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        tarikh: new Date().toLocaleDateString('ms-MY', {
+          timeZone: 'Asia/Kuala_Lumpur',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        }),
         perlu_kerusi_roda: perluWheelchair,
         no_plat_kereta: noPlatKereta.trim().toUpperCase(),
         no_terkini_sebelum: noSebelum || 'Sedang Bermula'
-      });
+      };
+
+      setTiketSelesai(dataTiketBaharu);
+
+      // Terus cetuskan cetakan
+      cetakResitThermal(dataTiketBaharu, iframeCetak);
+
+      // Tutup paparan resit secara automatik selepas 8 saat jika belum ditutup oleh onafterprint
+      if (timerTutupRef.current) clearTimeout(timerTutupRef.current);
+      timerTutupRef.current = setTimeout(() => {
+        semakSemula();
+      }, 8000);
 
     } catch (err: any) {
       alert('Ralat pendaftaran: ' + err.message);
@@ -399,34 +599,7 @@ export default function PendaftaranKiosk() {
       alignItems: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
-      {/* Format Cetakan Slip Thermal */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printSlipArea, #printSlipArea * {
-            visibility: visible !important;
-          }
-          #printSlipArea {
-            position: fixed !important;
-            left: 50% !important;
-            top: 10px !important;
-            transform: translateX(-50%) !important;
-            width: 300px !important;
-            padding: 12px !important;
-            box-shadow: none !important;
-            border: 1px dashed #000 !important;
-            background: #fff !important;
-            color: #000 !important;
-          }
-          .kioskHideOnPrint {
-            display: none !important;
-          }
-        }
-      `}} />
-
-      <div className="kioskHideOnPrint" style={{
+      <div style={{
         width: '100%',
         maxWidth: '520px',
         backgroundColor: '#0f172a',
@@ -449,14 +622,14 @@ export default function PendaftaranKiosk() {
             alt="Logo SyifaLink" 
             style={{ 
               width: '160px', 
-              height: 'auto',
-              margin: '0 auto 0.75rem auto',
+              height: 'auto', 
+              margin: '0 auto 0.75rem auto', 
               display: 'block',
               filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4))'
             }} 
           />
           <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
-            Kiosk Pendaftaran Giliran & Rawatan Darul Syifa'
+            Kiosk Pendaftaran Giliran &amp; Rawatan Darul Syifa&apos;
           </p>
         </div>
 
@@ -855,14 +1028,11 @@ export default function PendaftaranKiosk() {
         )}
       </div>
 
-      {/* MODAL RESIT (BEBAS BUTANG — HILANG SENDIRI SELEPAS CETAKAN) */}
+      {/* MODAL PENGESAHAN DI SKRIN KIOSK */}
       {tiketSelesai && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          inset: 0,
           backgroundColor: 'rgba(0, 0, 0, 0.85)',
           display: 'flex',
           justifyContent: 'center',
@@ -870,124 +1040,101 @@ export default function PendaftaranKiosk() {
           padding: '1rem',
           zIndex: 100
         }}>
-          <div id="printSlipArea" style={{
+          <div style={{
             backgroundColor: '#ffffff',
             color: '#0f172a',
-            borderRadius: '1.25rem',
+            borderRadius: '0.75rem',
             width: '100%',
-            maxWidth: '380px',
-            padding: '2rem 1.75rem',
+            maxWidth: '280px',
+            padding: '1.25rem',
             textAlign: 'center',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)'
           }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', color: '#059669', fontSize: '0.95rem', fontWeight: 900, letterSpacing: '0.05em' }}>
-              PUSAT RAWATAN ISLAM DARUL SYIFA'
-            </h3>
-
-            {/* Nombor Giliran Dijana */}
             <div style={{
-              fontSize: '4.8rem',
-              fontWeight: 950,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.35rem',
+              color: '#059669',
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              marginBottom: '0.5rem'
+            }}>
+              <CheckCircle2 size={18} /> Pendaftaran Berjaya
+            </div>
+
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>
+              NOMBOR GILIRAN ANDA
+            </div>
+
+            <div style={{
+              fontSize: '3.25rem',
+              fontWeight: 900,
               color: '#0f172a',
-              letterSpacing: '-0.03em',
-              margin: '0.3rem 0 0.5rem 0',
-              lineHeight: 1
+              lineHeight: 1.1,
+              margin: '0.25rem 0 0.75rem 0'
             }}>
               {tiketSelesai.no_giliran}
             </div>
 
-            {tiketSelesai.perlu_kerusi_roda && (
-              <div style={{
-                backgroundColor: '#fef3c7',
-                border: '1px solid #f59e0b',
-                color: '#92400e',
-                borderRadius: '0.4rem',
-                padding: '0.35rem 0.6rem',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                marginBottom: '1rem'
-              }}>
-                <Accessibility size={15} /> Bantuan Kerusi Roda ({tiketSelesai.no_plat_kereta || 'Drop-Off'})
-              </div>
-            )}
-
             <div style={{
-              textAlign: 'left',
-              fontSize: '0.88rem',
-              color: '#334155',
-              borderTop: '1px solid #e2e8f0',
-              borderBottom: '1px solid #e2e8f0',
-              padding: '0.85rem 0',
+              textAlign: 'center',
+              fontSize: '0.85rem',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '0.5rem',
+              padding: '0.65rem',
               marginBottom: '0.85rem',
               display: 'flex',
               flexDirection: 'column',
-              gap: '0.45rem'
+              gap: '0.25rem'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Pesakit:</span>
-                <strong style={{ color: '#0f172a' }}>{tiketSelesai.nama}</strong>
-              </div>
-
-              {tiketSelesai.perawat_nama && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Penetapan Tabib:</span>
-                  <strong style={{ color: '#0284c7' }}>{tiketSelesai.perawat_nama}</strong>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Bilik Rawatan:</span>
-                <strong style={{ color: '#059669' }}>{tiketSelesai.lokasi}</strong>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Masa Daftar:</span>
-                <strong style={{ color: '#0f172a' }}>{tiketSelesai.masa}</strong>
-              </div>
+              <div>Nama: <strong>{tiketSelesai.nama}</strong></div>
+              {tiketSelesai.perawat_nama && <div>Tabib: <strong>{tiketSelesai.perawat_nama}</strong></div>}
+              <div>Bilik: <strong>{tiketSelesai.lokasi}</strong></div>
+              <div>No. Terkini: <strong>{tiketSelesai.no_terkini_sebelum}</strong></div>
             </div>
 
-            {/* Maklumat Nombor Terkini Sebelumnya */}
-            <div style={{
-              backgroundColor: '#f8fafc',
-              border: '1px dashed #cbd5e1',
-              borderRadius: '0.75rem',
-              padding: '0.85rem 1rem',
-              marginBottom: '1.25rem',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
-                Nombor Terkini Sebelum Anda:
-              </div>
-              <div style={{
-                fontSize: '1.5rem',
-                fontWeight: 950,
-                color: '#008790',
-                margin: '0.2rem 0 0.45rem 0',
-                letterSpacing: '0.04em'
-              }}>
-                {tiketSelesai.no_terkini_sebelum}
-              </div>
-              <div style={{
-                backgroundColor: '#ecfdf5',
-                border: '1px solid #10b981',
-                color: '#065f46',
-                padding: '0.45rem 0.65rem',
-                borderRadius: '0.45rem',
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                lineHeight: 1.35
-              }}>
-                ✦ Anda akan dipanggil sebentar lagi. Sila nantikan panggilan di ruang menunggu.
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => cetakResitThermal(tiketSelesai)}
+              style={{
+                width: '100%',
+                backgroundColor: '#0284c7',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '0.5rem',
+                padding: '0.65rem',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                marginBottom: '0.5rem'
+              }}
+            >
+              <Printer size={16} /> Cetak Semula Tiket
+            </button>
 
-            {/* Petunjuk Automatik Untuk Pengguna (Tiada Butang) */}
-            <div className="kioskHideOnPrint" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: '#64748b', fontSize: '0.8rem', fontWeight: 600 }}>
-              <Printer size={15} /> Sedang mencetak tiket anda...
-            </div>
+            <button
+              type="button"
+              onClick={semakSemula}
+              style={{
+                width: '100%',
+                backgroundColor: '#f1f5f9',
+                color: '#334155',
+                border: '1px solid #cbd5e1',
+                borderRadius: '0.5rem',
+                padding: '0.55rem',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Selesai / Daftar Pesakit Seterusnya
+            </button>
           </div>
         </div>
       )}

@@ -25,7 +25,8 @@ import {
   TrendingUp, 
   DoorOpen, 
   Radio,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -245,38 +246,86 @@ export default function PapanPemukaAdmin() {
   // 2. Muat Semua Data Transaksi Masuk
   const muatDataKewangan = async () => {
     try {
-      const { data: dataSemuaMasuk } = await supabase
+      let { data: dataSemuaMasuk, error } = await supabase
         .from('lejar_kewangan')
         .select('*, pesakit(nama, no_ic)')
-        .eq('jenis_transaksi', 'masuk')
         .order('created_at', { ascending: false });
 
+      if (error) {
+        const fallback = await supabase
+          .from('lejar_kewangan')
+          .select('*')
+          .order('id', { ascending: false });
+        dataSemuaMasuk = fallback.data;
+      }
+
       if (dataSemuaMasuk) {
-        setSemuaTransaksiMasuk(dataSemuaMasuk);
+        const hanyaMasuk = dataSemuaMasuk.filter(
+          (trx: any) => !trx.jenis_transaksi || String(trx.jenis_transaksi).toLowerCase() !== 'keluar'
+        );
+        setSemuaTransaksiMasuk(hanyaMasuk);
       }
     } catch (err) {
       console.warn('Ralat memuat data kewangan:', err);
     }
   };
 
-  // 3. Pengiraan Tarikh & Penapis Transaksi Dinamik
-  const tarikhHariIni = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Helper Penukaran Tarikh Waktu Malaysia (GMT+8)
+  const formatTarikhMY = (input?: string | Date): string => {
+    const d = input ? new Date(input) : new Date();
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  };
+
+  const normalisasiTarikhStr = (str: string): string => {
+    const bersih = str.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(bersih)) return bersih.slice(0, 10);
+    if (bersih.includes('/')) {
+      const [d, m, y] = bersih.split('/');
+      if (d && m && y) return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    return '';
+  };
+
+  const ekstrakTarikhTrxMY = (trx: any): string => {
+    if (trx.created_at) {
+      const dariCreated = formatTarikhMY(trx.created_at);
+      if (dariCreated) return dariCreated;
+    }
+    if (trx.tarikh) {
+      return normalisasiTarikhStr(String(trx.tarikh));
+    }
+    return '';
+  };
+
+  const isTransaksiHariIni = (trx: any, targetHariIni: string): boolean => {
+    if (trx.created_at && formatTarikhMY(trx.created_at) === targetHariIni) return true;
+    if (trx.tarikh && normalisasiTarikhStr(String(trx.tarikh)) === targetHariIni) return true;
+    return false;
+  };
+
+  // 3. Pengiraan Tarikh & Penapis Transaksi Dinamik (Waktu Malaysia)
+  const tarikhHariIni = formatTarikhMY();
 
   const tarikhMulaMinggu = useMemo(() => {
-    const d = new Date();
-    const day = d.getDay();
+    const [y, m, d] = tarikhHariIni.split('-').map(Number);
+    const lokal = new Date(y, m - 1, d);
+    const day = lokal.getDay();
     const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    return d.toISOString().split('T')[0];
-  }, []);
+    lokal.setDate(lokal.getDate() + diff);
+    return `${lokal.getFullYear()}-${String(lokal.getMonth() + 1).padStart(2, '0')}-${String(lokal.getDate()).padStart(2, '0')}`;
+  }, [tarikhHariIni]);
 
   const tarikhMulaBulan = useMemo(() => {
-    const d = new Date();
-    const bulan = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}-${bulan}-01`;
-  }, []);
+    return `${tarikhHariIni.slice(0, 7)}-01`;
+  }, [tarikhHariIni]);
 
-  // Kiraan Ringkasan 4 Kad Utama
+  // Kiraan Ringkasan 4 Kad Utama (Perakaunan Tepat Tanpa Pengiraan Berganda)
   const ringkasanKutipan = useMemo(() => {
     let hariIni = 0;
     let mingguIni = 0;
@@ -285,10 +334,10 @@ export default function PapanPemukaAdmin() {
 
     semuaTransaksiMasuk.forEach((trx) => {
       const val = Number(trx.jumlah) || 0;
-      const t = trx.tarikh || (trx.created_at ? trx.created_at.split('T')[0] : '');
+      const t = ekstrakTarikhTrxMY(trx);
 
       totalKutipan += val;
-      if (t === tarikhHariIni) hariIni += val;
+      if (isTransaksiHariIni(trx, tarikhHariIni)) hariIni += val;
       if (t >= tarikhMulaMinggu) mingguIni += val;
       if (t >= tarikhMulaBulan) bulanIni += val;
     });
@@ -299,11 +348,11 @@ export default function PapanPemukaAdmin() {
   // Transaksi Ditapis Mengikut Kad Yang Dipilih
   const transaksiDitapis = useMemo(() => {
     return semuaTransaksiMasuk.filter((trx) => {
-      const t = trx.tarikh || (trx.created_at ? trx.created_at.split('T')[0] : '');
-      if (tempohKewanganPilihan === 'hari') return t === tarikhHariIni;
+      const t = ekstrakTarikhTrxMY(trx);
+      if (tempohKewanganPilihan === 'hari') return isTransaksiHariIni(trx, tarikhHariIni);
       if (tempohKewanganPilihan === 'minggu') return t >= tarikhMulaMinggu;
       if (tempohKewanganPilihan === 'bulan') return t >= tarikhMulaBulan;
-      return true; // 'total'
+      return true;
     });
   }, [semuaTransaksiMasuk, tempohKewanganPilihan, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan]);
 
@@ -403,7 +452,9 @@ export default function PapanPemukaAdmin() {
 
   useEffect(() => {
     if (!sedangSemakSesi && profilAdmin) {
-      if (profilAdmin.peranan === 'super_admin' || profilAdmin.peranan === 'admin_kewangan_inventori') {
+      const bolehKewangan = profilAdmin.peranan === 'super_admin' || profilAdmin.peranan === 'admin_kewangan_inventori';
+
+      if (bolehKewangan) {
         muatDataKewangan();
         muatDataInventori();
       }
@@ -418,6 +469,24 @@ export default function PapanPemukaAdmin() {
         muatDataTicker();
         muatDataAdmin();
       }
+
+      const intervalKewangan = bolehKewangan
+        ? setInterval(() => {
+            muatDataKewangan();
+          }, 4000)
+        : null;
+
+      const saluranKewangan = supabase
+        .channel('admin_kewangan_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'lejar_kewangan' }, () => {
+          muatDataKewangan();
+        })
+        .subscribe();
+
+      return () => {
+        if (intervalKewangan) clearInterval(intervalKewangan);
+        supabase.removeChannel(saluranKewangan);
+      };
     }
   }, [sedangSemakSesi, profilAdmin]);
 
@@ -1068,7 +1137,7 @@ export default function PapanPemukaAdmin() {
     hari: 'Hari Ini',
     minggu: 'Minggu Ini',
     bulan: 'Bulan Ini',
-    total: 'Keseluruhan (Total Kutipan)'
+    total: 'Keseluruhan (Semua Bulan)'
   }[tempohKewanganPilihan];
 
   return (
@@ -1189,11 +1258,11 @@ export default function PapanPemukaAdmin() {
         }
       `}} />
 
-      {/* DOKUMEN CETAKAN KHAS (HANYA MUNCUL DI PRINT WINDOW) */}
+      {/* DOKUMEN CETAKAN KHAS */}
       <div id="print-financial-report">
         <div className="print-header-box">
-          <h1 className="print-clinic-name">PUSAT RAWATAN ISLAM DARUL SYIFA'</h1>
-          <p className="print-doc-title">Laporan Penyata Kutipan & Aliran Tunai ({labelTempoh})</p>
+          <h1 className="print-clinic-name">PUSAT RAWATAN ISLAM DARUL SYIFA&apos;</h1>
+          <p className="print-doc-title">Laporan Penyata Kutipan &amp; Aliran Tunai ({labelTempoh})</p>
           <div className="print-meta-grid">
             <span>Tarikh: {new Date().toLocaleDateString('ms-MY')} {new Date().toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}</span>
             <span>Pegawai: {profilAdmin?.nama} ({profilAdmin?.peranan.replace(/_/g, ' ')})</span>
@@ -1226,7 +1295,7 @@ export default function PapanPemukaAdmin() {
             <tr>
               <th style={{ width: '35px', textAlign: 'center' }}>No.</th>
               <th>No. Resit</th>
-              <th>Tarikh & Masa</th>
+              <th>Tarikh &amp; Masa</th>
               <th>Nama Pesakit</th>
               <th>No. K/P</th>
               <th>Kaedah</th>
@@ -1245,7 +1314,7 @@ export default function PapanPemukaAdmin() {
                 <tr key={trx.id}>
                   <td style={{ textAlign: 'center' }}>{idx + 1}</td>
                   <td>{trx.no_resit}</td>
-                  <td>{new Date(trx.created_at).toLocaleDateString('ms-MY')} {new Date(trx.created_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>{trx.created_at ? `${new Date(trx.created_at).toLocaleDateString('ms-MY')} ${new Date(trx.created_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}` : (trx.tarikh || '-')}</td>
                   <td>{trx.pesakit?.nama || 'Pesakit Am'}</td>
                   <td>{trx.pesakit?.no_ic || '-'}</td>
                   <td>{trx.kaedah_bayaran === 'tunai' ? 'Tunai' : 'DuitNow QR'}</td>
@@ -1270,9 +1339,7 @@ export default function PapanPemukaAdmin() {
         </div>
       </div>
 
-      {/* ========================================================
-          PAPARAN SKRIN SISTEM (SEIMBANG & PENUH KANAN-KIRI)
-         ======================================================== */}
+      {/* PAPARAN SKRIN SISTEM */}
       <div className="screen-only-wrapper" style={{ width: '100%', maxWidth: '1440px', margin: '0 auto' }}>
         <div style={{ marginBottom: '1rem' }}>
           <Link href="/" style={{ color: '#64748b', fontSize: '0.85rem', textDecoration: 'none' }}>
@@ -1338,17 +1405,17 @@ export default function PapanPemukaAdmin() {
           {isKewangan && (
             <>
               <button onClick={() => setTabAktif('kewangan')} className={`${styles.tabBtn} ${tabAktif === 'kewangan' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
-                <DollarSign size={16} /> Aliran Tunai & Penyata
+                <DollarSign size={16} /> Aliran Tunai &amp; Penyata
               </button>
               <button onClick={() => setTabAktif('inventori')} className={`${styles.tabBtn} ${tabAktif === 'inventori' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
-                <Package size={16} /> Inventori & Stok
+                <Package size={16} /> Inventori &amp; Stok
               </button>
             </>
           )}
 
           {isPesakit && (
             <button onClick={() => setTabAktif('pesakit')} className={`${styles.tabBtn} ${tabAktif === 'pesakit' ? styles.tabBtnActive : ''}`} style={{ fontWeight: 500 }}>
-              <Users size={16} /> Direktori & Sejarah Pesakit
+              <Users size={16} /> Direktori &amp; Sejarah Pesakit
             </button>
           )}
 
@@ -1383,7 +1450,7 @@ export default function PapanPemukaAdmin() {
               💡 <em>Klik pada mana-mana kad tempoh kutipan di bawah untuk melihat perincian dan transaksi spesifik:</em>
             </p>
 
-            {/* 4 KAD INTERAKTIF SEIMBANG 4 LAJUR (NIPIS & KEMAS) */}
+            {/* 4 KAD INTERAKTIF */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1474,7 +1541,7 @@ export default function PapanPemukaAdmin() {
                 </div>
               </div>
 
-              {/* KAD 4: TOTAL KUTIPAN */}
+              {/* KAD 4: KUTIPAN KESELURUHAN (SEMUA BULAN) */}
               <div 
                 onClick={() => setTempohKewanganPilihan('total')}
                 style={{ 
@@ -1487,12 +1554,12 @@ export default function PapanPemukaAdmin() {
                   boxShadow: tempohKewanganPilihan === 'total' ? '0 4px 15px rgba(168, 85, 247, 0.2)' : 'none'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                    <DollarSign size={14} /> Total Kutipan
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.35rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontSize: '0.72rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                    <DollarSign size={14} /> Kutipan Keseluruhan (Semua Bulan)
                   </div>
                   {tempohKewanganPilihan === 'total' && (
-                    <span style={{ fontSize: '0.65rem', color: '#c084fc', fontWeight: 500, backgroundColor: 'rgba(168, 85, 247, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#c084fc', fontWeight: 500, backgroundColor: 'rgba(168, 85, 247, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem', flexShrink: 0 }}>
                       Dipilih
                     </span>
                   )}
@@ -1503,7 +1570,7 @@ export default function PapanPemukaAdmin() {
               </div>
             </div>
 
-            {/* 3 KOTAK PECAHAN (SEIMBANG & PENUH) */}
+            {/* 3 KOTAK PECAHAN */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',
@@ -1538,7 +1605,7 @@ export default function PapanPemukaAdmin() {
               </div>
             </div>
 
-            {/* JADUAL TRANSAKSI PENUH (LEBAR 100% TANPA KOSONG DI KANAN) */}
+            {/* JADUAL TRANSAKSI */}
             <div className={styles.cardPanel} style={{ width: '100%', boxSizing: 'border-box' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
                 <div>
@@ -1549,25 +1616,46 @@ export default function PapanPemukaAdmin() {
                     Menunjukkan {transaksiDitapis.length} transaksi bagi pilihan aktif
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  style={{
-                    backgroundColor: '#1e293b',
-                    color: '#38bdf8',
-                    border: '1px solid #334155',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '0.4rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem'
-                  }}
-                >
-                  <Printer size={13} /> Cetak Penyata
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={muatDataKewangan}
+                    style={{
+                      backgroundColor: '#1e293b',
+                      color: '#34d399',
+                      border: '1px solid #334155',
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '0.4rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                  >
+                    <RefreshCw size={13} /> Segar Semula
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    style={{
+                      backgroundColor: '#1e293b',
+                      color: '#38bdf8',
+                      border: '1px solid #334155',
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '0.4rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                  >
+                    <Printer size={13} /> Cetak Penyata
+                  </button>
+                </div>
               </div>
 
               <div className={styles.tableWrapper}>
@@ -1595,9 +1683,15 @@ export default function PapanPemukaAdmin() {
                         <tr key={trx.id}>
                           <td style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>{idx + 1}</td>
                           <td style={{ color: '#38bdf8', fontWeight: 500, fontSize: '0.8rem' }}>{trx.no_resit}</td>
-                          <td style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>{new Date(trx.created_at).toLocaleDateString('ms-MY')}</td>
+                          <td style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                            {trx.created_at
+                              ? new Date(trx.created_at).toLocaleDateString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' })
+                              : (trx.tarikh || '-')}
+                          </td>
                           <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                            {new Date(trx.created_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                            {trx.created_at
+                              ? new Date(trx.created_at).toLocaleTimeString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit' })
+                              : '-'}
                           </td>
                           <td style={{ fontWeight: 500, color: '#f1f5f9', fontSize: '0.8rem' }}>
                             {trx.pesakit?.nama || 'Pesakit Am'}
@@ -1635,7 +1729,7 @@ export default function PapanPemukaAdmin() {
             {subTabInventori === 'baki' && (
               <div className={styles.cardPanel}>
                 <div className={styles.tableHeaderActionRow}>
-                  <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Katalog Inventori & Stok Semasa</h2></div>
+                  <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Katalog Inventori &amp; Stok Semasa</h2></div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     {selectedBahan.length > 0 && (
                       <button onClick={padamBahanPukal} disabled={memproses} className={styles.btnBulkDelete}>
@@ -1678,7 +1772,7 @@ export default function PapanPemukaAdmin() {
                           <td>{b.stok_semasa <= b.tahap_amaran ? <span className={styles.badgeLow}>Rendah</span> : <span className={styles.badgeOk}>Cukup</span>}</td>
                           <td>
                             <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                              <button onClick={() => { setItemDiedit(b); setFormNama(b.nama_item); setFormKategori(b.kategori); setFormHarga(String(b.harga)); setFormStokAwal(String(b.stok_semasa)); setFormTahapAmaran(String(b.tahap_amaran)); }} className={styles.btnEdit}>
+                              <button type="button" onClick={() => { setItemDiedit(b); setFormNama(b.nama_item); setFormKategori(b.kategori); setFormHarga(String(b.harga)); setFormStokAwal(String(b.stok_semasa)); setFormTahapAmaran(String(b.tahap_amaran)); }} className={styles.btnEdit}>
                                 <Edit size={12} /> Edit
                               </button>
                             </div>
@@ -1715,7 +1809,7 @@ export default function PapanPemukaAdmin() {
                     <thead>
                       <tr>
                         <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
-                        <th style={{ fontWeight: 500 }}>Tarikh & Masa</th>
+                        <th style={{ fontWeight: 500 }}>Tarikh &amp; Masa</th>
                         <th style={{ fontWeight: 500 }}>Item</th>
                         <th style={{ fontWeight: 500 }}>Kuantiti Keluar</th>
                         <th style={{ fontWeight: 500 }}>Baki Tinggal</th>
@@ -1743,7 +1837,7 @@ export default function PapanPemukaAdmin() {
         {tabAktif === 'pesakit' && isPesakit && (
           <div className={styles.cardPanel} style={{ width: '100%' }}>
             <div className={styles.tableHeaderActionRow}>
-              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Direktori Pesakit & Rekod Rawatan</h2></div>
+              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Direktori Pesakit &amp; Rekod Rawatan</h2></div>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 {selectedPesakit.length > 0 && (
                   <button onClick={padamPesakitPukal} disabled={memproses} className={styles.btnBulkDelete}>
@@ -1766,6 +1860,7 @@ export default function PapanPemukaAdmin() {
                     <th style={{ fontWeight: 500 }}>No. Kad Pengenalan</th>
                     <th style={{ fontWeight: 500 }}>No. Telefon</th>
                     <th style={{ fontWeight: 500 }}>Alamat Kediaman</th>
+                    <th style={{ fontWeight: 500 }}>Tarikh Daftar</th>
                     <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
                   </tr>
                 </thead>
@@ -1799,7 +1894,7 @@ export default function PapanPemukaAdmin() {
         {tabAktif === 'perawat' && isSuper && (
           <div className={styles.cardPanel} style={{ width: '100%' }}>
             <div className={styles.tableHeaderActionRow}>
-              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Portfolio & Tauliah Perawat</h2></div>
+              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Portfolio &amp; Tauliah Perawat</h2></div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {selectedPerawat.length > 0 && (
                   <button onClick={padamPerawatPukal} disabled={memproses} className={styles.btnBulkDelete}>
@@ -1878,7 +1973,7 @@ export default function PapanPemukaAdmin() {
               <div>
                 <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Kawalan Bilik Rawatan Fizikal</h2>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Pantau perawat yang sedang *check-in* di setiap bilik dan lepaskan bilik jika berlaku kekeliruan syif
+                  Pantau perawat yang sedang <em>check-in</em> di setiap bilik dan lepaskan bilik jika berlaku kekeliruan syif
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2417,7 +2512,7 @@ export default function PapanPemukaAdmin() {
         {tabAktif === 'admin' && isSuper && (
           <div className={styles.cardPanel} style={{ width: '100%' }}>
             <div className={styles.tableHeaderActionRow}>
-              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan & Lantikan Pentadbir Sistem</h2></div>
+              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan &amp; Lantikan Pentadbir Sistem</h2></div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {selectedAdmin.length > 0 && (
                   <button onClick={padamAdminPukal} disabled={memproses} className={styles.btnBulkDelete}>
@@ -2484,7 +2579,7 @@ export default function PapanPemukaAdmin() {
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent}>
             <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>Kemaskini Profil & Alamat Pesakit</h3>
+              <h3 className={styles.modalTitle}>Kemaskini Profil &amp; Alamat Pesakit</h3>
               <button onClick={() => setPesakitDiedit(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <form onSubmit={simpanKemaskiniPesakit}>
@@ -2856,7 +2951,7 @@ export default function PapanPemukaAdmin() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Rujukan (cth: Surah Asy-Syu'ara' : 80):</label>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Rujukan (cth: Surah Asy-Syu&apos;ara&apos; : 80):</label>
                   <input
                     type="text"
                     placeholder="Surah Asy-Syu'ara' : 80"
@@ -2874,8 +2969,8 @@ export default function PapanPemukaAdmin() {
                     onChange={(e) => setFormKategoriTicker(e.target.value)}
                   >
                     <option value="makluman">Makluman Pentadbiran</option>
-                    <option value="ayat_syifa">Ayat Syifa' & Doa</option>
-                    <option value="promosi">Promosi & Hebahan</option>
+                    <option value="ayat_syifa">Ayat Syifa&apos; &amp; Doa</option>
+                    <option value="promosi">Promosi &amp; Hebahan</option>
                   </select>
                 </div>
               </div>
@@ -2951,6 +3046,46 @@ export default function PapanPemukaAdmin() {
               <div className={styles.modalActions}>
                 <button type="button" onClick={() => setBukaModalTambahBahan(false)} className={styles.btnCancel}>Batal</button>
                 <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><PlusCircle size={14} /> Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 10: EDIT ITEM INVENTORI */}
+      {itemDiedit && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Kemaskini Item Inventori</h3>
+              <button type="button" onClick={() => setItemDiedit(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <form onSubmit={simpanKemaskiniItem}>
+              <div className={styles.formGridModal}>
+                <div className={styles.formGroupFull}>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Nama Item:</label>
+                  <input type="text" required className={styles.inputField} value={formNama} onChange={(e) => setFormNama(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Kategori:</label>
+                  <input type="text" required className={styles.inputField} value={formKategori} onChange={(e) => setFormKategori(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Harga Jualan (RM):</label>
+                  <input type="number" step="0.01" required className={styles.inputField} value={formHarga} onChange={(e) => setFormHarga(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Baki Stok Semasa:</label>
+                  <input type="number" required className={styles.inputField} value={formStokAwal} onChange={(e) => setFormStokAwal(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Tahap Amaran Stok:</label>
+                  <input type="number" required className={styles.inputField} value={formTahapAmaran} onChange={(e) => setFormTahapAmaran(e.target.value)} />
+                </div>
+              </div>
+              <div className={styles.modalActions}>
+                <button type="button" onClick={() => setItemDiedit(null)} className={styles.btnCancel}>Batal</button>
+                <button type="submit" disabled={memproses} className={styles.btnAction} style={{ fontWeight: 500 }}><Edit size={14} /> Simpan Kemaskini</button>
               </div>
             </form>
           </div>
