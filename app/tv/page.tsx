@@ -42,9 +42,9 @@ export default function SkrinTVDewan() {
   // Status Animasi Berkelip Semasa Suara Berkumandang
   const [sedangPanggilAudio, setSedangPanggilAudio] = useState<boolean>(false);
 
-  // Status Kawalan Manual & Hover Pemain Video
+  // Status Kawalan Manual & Hover Tag Bawah Video
   const [videoDijedaManual, setVideoDijedaManual] = useState<boolean>(false);
-  const [videoHovered, setVideoHovered] = useState<boolean>(false);
+  const [barHovered, setBarHovered] = useState<boolean>(false);
 
   // Cuaca & Waktu Solat
   const [suhuCuaca, setSuhuCuaca] = useState<string>('26°C');
@@ -253,7 +253,6 @@ export default function SkrinTVDewan() {
       audioTtsRef.current.play().catch(() => {});
     }
 
-    // Aktifkan bunyi video latar serta-merta
     selarasAudioVideo(true);
     if (videoPlayerRef.current && !videoDijedaManualRef.current) {
       videoPlayerRef.current.play().catch(() => {});
@@ -858,15 +857,14 @@ export default function SkrinTVDewan() {
           outline-offset: 3px !important;
           box-shadow: 0 0 20px rgba(250, 204, 21, 0.7) !important;
         }
-        .video-box-hover-zone .video-bottom-bar {
+        .video-bottom-trigger .video-bottom-bar {
           opacity: 0;
           visibility: hidden;
           transform: translateY(6px);
-          transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
+          transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease;
         }
-        .video-box-hover-zone:hover .video-bottom-bar,
-        .video-box-hover-zone:focus-within .video-bottom-bar,
-        .video-box-hover-zone.is-hovered .video-bottom-bar {
+        .video-bottom-trigger:hover .video-bottom-bar,
+        .video-bottom-trigger.is-hovered .video-bottom-bar {
           opacity: 1;
           visibility: visible;
           transform: translateY(0);
@@ -937,12 +935,12 @@ export default function SkrinTVDewan() {
                   textOverflow: 'ellipsis'
                 }}
               >
-                Pusat Rawatan Islam Darul Syifa&apos;
+                Pusat Rawatan Islam Darussyifa&apos;
               </h1>
             </div>
           </div>
 
-          {/* CUACA & TAKWIM SOLAT (DIKECILKAN SEDIKIT) */}
+          {/* CUACA & TAKWIM SOLAT */}
           <div className={styles.islamicInfoBar} style={{ gap: '0.45rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             {/* PIL LAPORAN CUACA */}
             <div 
@@ -1015,7 +1013,7 @@ export default function SkrinTVDewan() {
             </div>
           </div>
 
-          {/* JAM DIGITAL & TARIKH (TERLIHAT PENUH DI PENJURU KANAN) */}
+          {/* JAM DIGITAL & TARIKH */}
           <div className={styles.clockArea} style={{ flexShrink: 0, textAlign: 'right', paddingLeft: '0.25rem' }}>
             <div className={styles.digitalTime} style={{ fontSize: '1.22rem', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
               {masaSekarang}
@@ -1234,7 +1232,7 @@ export default function SkrinTVDewan() {
                       minHeight: 0
                     }}
                   >
-                    {/* LAJUR KIRI: NAMA BILIK & TABIB (DIKECILKAN) */}
+                    {/* LAJUR KIRI: NAMA BILIK & TABIB */}
                     <div
                       className={styles.roomDoctorCol}
                       style={{
@@ -1335,12 +1333,9 @@ export default function SkrinTVDewan() {
           </section>
 
           {/* ========================================================
-              BARIS 2 KIRI: PEMAIN VIDEO (LANCAR TANPA BUFFER LOOP)
+              BARIS 2 KIRI: PEMAIN VIDEO (TAG TERSEMBUNYI HINGGA DIARAHKAN KURSOR)
               ======================================================== */}
           <div
-            className={`video-box-hover-zone ${videoHovered ? 'is-hovered' : ''}`}
-            onMouseEnter={() => setVideoHovered(true)}
-            onMouseLeave={() => setVideoHovered(false)}
             style={{
               height: '100%',
               minHeight: '185px',
@@ -1448,123 +1443,145 @@ export default function SkrinTVDewan() {
               </div>
             )}
 
-            {/* BAR TAG & KAWALAN DI BAWAH (TERSEMBUNYI SEHINGGA KURSOR DILETAKKAN) */}
+            {/* ZON HOVER KHUSUS DI BAWAH VIDEO: MUNCUL HANYA APABILA KURSOR DIARAHKAN PADANYA */}
             {videoSemasa && (
               <div
-                className="video-bottom-bar"
+                className={`video-bottom-trigger ${barHovered ? 'is-hovered' : ''}`}
+                onMouseEnter={() => setBarHovered(true)}
+                onMouseLeave={() => {
+                  setBarHovered(false);
+                  if (document.activeElement instanceof HTMLElement) {
+                    document.activeElement.blur();
+                  }
+                }}
                 style={{
                   position: 'absolute',
-                  bottom: '10px',
-                  left: '10px',
-                  right: '10px',
-                  zIndex: 30,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '52px',
+                  zIndex: 35,
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.5rem',
-                  pointerEvents: 'none'
+                  alignItems: 'flex-end',
+                  padding: '0 10px 10px 10px',
+                  boxSizing: 'border-box'
                 }}
               >
-                {/* TAG TAJUK VIDEO (KIRI BAWAH) */}
                 <div
+                  className="video-bottom-bar"
                   style={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '0.5rem',
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                    color: '#ffffff',
-                    maxWidth: '65%',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: 'inline-flex',
+                    width: '100%',
+                    display: 'flex',
                     alignItems: 'center',
-                    gap: '0.4rem',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                    justifyContent: 'space-between',
+                    gap: '0.5rem',
+                    opacity: barHovered ? 1 : 0,
+                    visibility: barHovered ? 'visible' : 'hidden',
+                    transform: barHovered ? 'translateY(0)' : 'translateY(6px)',
+                    pointerEvents: barHovered ? 'auto' : 'none',
+                    transition: 'opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease'
                   }}
                 >
-                  <Film size={13} color="#38bdf8" />
-                  <span>{videoSemasa.tajuk}</span>
-                  <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
-                    • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
-                  </span>
-                </div>
-
-                {/* BUTANG MAIN / JEDA & AUDIO (KANAN BAWAH) */}
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    pointerEvents: 'auto'
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={togglePlayPauseVideo}
-                    className="tv-remote-focus"
-                    title={videoDijedaManual ? 'Mainkan Video (Play)' : 'Jedakan Video (Pause)'}
+                  {/* TAG TAJUK VIDEO (KIRI BAWAH) */}
+                  <div
                     style={{
                       backgroundColor: 'rgba(15, 23, 42, 0.88)',
-                      color: '#ffffff',
-                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      padding: '0.35rem 0.75rem',
                       borderRadius: '0.5rem',
-                      padding: '0.35rem 0.7rem',
-                      fontSize: '0.75rem',
+                      fontSize: '0.74rem',
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      color: '#ffffff',
+                      maxWidth: '65%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.35rem',
-                      boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                      gap: '0.4rem',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)'
                     }}
                   >
-                    {videoDijedaManual ? (
-                      <>
-                        <Play size={14} color="#34d399" /> Main
-                      </>
-                    ) : (
-                      <>
-                        <Pause size={14} color="#fbbf24" /> Jeda
-                      </>
-                    )}
-                  </button>
+                    <Film size={13} color="#38bdf8" />
+                    <span>{videoSemasa.tajuk}</span>
+                    <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
+                      • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
+                    </span>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!audioDibenarkanRef.current) {
-                        aktifkanSkrinPenuhDanAudio();
-                      } else {
-                        selarasAudioVideo(true);
-                      }
-                    }}
-                    className="tv-remote-focus"
-                    title="Pulihkan Audio Video"
+                  {/* BUTANG MAIN / JEDA & AUDIO (KANAN BAWAH) */}
+                  <div
                     style={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.88)',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(255, 255, 255, 0.25)',
-                      borderRadius: '0.5rem',
-                      padding: '0.35rem 0.55rem',
-                      cursor: 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                      gap: '0.4rem'
                     }}
                   >
-                    {audioDibenarkan && (videoSemasa.kelantangan_audio ?? 20) > 0 ? (
-                      <Volume2 size={15} />
-                    ) : (
-                      <VolumeX size={15} color="#f87171" />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={togglePlayPauseVideo}
+                      className="tv-remote-focus"
+                      title={videoDijedaManual ? 'Mainkan Video (Play)' : 'Jedakan Video (Pause)'}
+                      style={{
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        color: '#ffffff',
+                        border: '1px solid rgba(255, 255, 255, 0.25)',
+                        borderRadius: '0.5rem',
+                        padding: '0.35rem 0.7rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                      }}
+                    >
+                      {videoDijedaManual ? (
+                        <>
+                          <Play size={14} color="#34d399" /> Main
+                        </>
+                      ) : (
+                        <>
+                          <Pause size={14} color="#fbbf24" /> Jeda
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!audioDibenarkanRef.current) {
+                          aktifkanSkrinPenuhDanAudio();
+                        } else {
+                          selarasAudioVideo(true);
+                        }
+                      }}
+                      className="tv-remote-focus"
+                      title="Pulihkan Audio Video"
+                      style={{
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(255, 255, 255, 0.25)',
+                        borderRadius: '0.5rem',
+                        padding: '0.35rem 0.55rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                      }}
+                    >
+                      {audioDibenarkan && (videoSemasa.kelantangan_audio ?? 20) > 0 ? (
+                        <Volume2 size={15} />
+                      ) : (
+                        <VolumeX size={15} color="#f87171" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

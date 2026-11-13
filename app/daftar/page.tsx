@@ -245,7 +245,7 @@ export default function PendaftaranKiosk() {
         </head>
         <body>
           <div class="resit-wrapper">
-            <div class="tajuk">PUSAT RAWATAN ISLAM<br/>DARUL SYIFA'</div>
+            <div class="tajuk">PUSAT RAWATAN ISLAM<br/>DARUSSYIFA'</div>
             <div class="subtajuk">SLIP GILIRAN RASMI</div>
             <div class="nombor-utama">${tiket.no_giliran}</div>
             ${
@@ -629,7 +629,7 @@ export default function PendaftaranKiosk() {
             }} 
           />
           <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
-            Kiosk Pendaftaran Giliran &amp; Rawatan Darul Syifa&apos;
+            Kiosk Pendaftaran Giliran &amp; Rawatan Darussyifa&apos;
           </p>
         </div>
 

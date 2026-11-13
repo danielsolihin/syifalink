@@ -11,7 +11,14 @@ import {
   Banknote,
   RefreshCw,
   QrCode,
-  Printer
+  Printer,
+  LogOut,
+  Lock,
+  User,
+  KeyRound,
+  LogIn,
+  ArrowLeft,
+  ShieldCheck
 } from 'lucide-react';
 
 interface ItemPesananFarmasi {
@@ -66,7 +73,21 @@ interface ResitCetak {
   tempohMc: number;
 }
 
+const KUNCI_SESI_FARMASI = 'syifalink_farmasi_unlocked';
+
 export default function KaunterFarmasi() {
+  // State Pengesahan Keselamatan Kaunter Farmasi
+  const [sedangSemakSesi, setSedangSemakSesi] = useState(true);
+  const [sudahLogMasuk, setSudahLogMasuk] = useState(false);
+  const [namaPetugas, setNamaPetugas] = useState('');
+
+  // State Borang Log Masuk
+  const [usernameAtauEmail, setUsernameAtauEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [sedangLogin, setSedangLogin] = useState(false);
+  const [ralatLogin, setRalatLogin] = useState('');
+
+  // State Operasi Farmasi
   const [senaraiPesanan, setSenaraiPesanan] = useState<ItemPesananFarmasi[]>([]);
   const [pesananDipilih, setPesananDipilih] = useState<ItemPesananFarmasi | null>(null);
   const [kaedahBayaran, setKaedahBayaran] = useState<'tunai' | 'duitnow_qr'>('tunai');
@@ -74,6 +95,123 @@ export default function KaunterFarmasi() {
   const [sedangMemuat, setSedangMemuat] = useState(true);
 
   const [resitUntukCetak, setResitUntukCetak] = useState<ResitCetak | null>(null);
+
+  // 0. Semakan Sesi Semasa Halaman Dimuatkan
+  useEffect(() => {
+    const semakPengesahan = async () => {
+      try {
+        const dibukaDalamTabIni =
+          typeof window !== 'undefined' &&
+          sessionStorage.getItem(KUNCI_SESI_FARMASI) === 'true';
+
+        if (!dibukaDalamTabIni) {
+          setSudahLogMasuk(false);
+          setSedangSemakSesi(false);
+          return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          sessionStorage.removeItem(KUNCI_SESI_FARMASI);
+          setSudahLogMasuk(false);
+          setSedangSemakSesi(false);
+          return;
+        }
+
+        const { data: profil } = await supabase
+          .from('admin_profil')
+          .select('nama')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        setNamaPetugas(profil?.nama || session.user.email || 'Petugas Farmasi');
+        setSudahLogMasuk(true);
+      } catch (err) {
+        setSudahLogMasuk(false);
+      } finally {
+        setSedangSemakSesi(false);
+      }
+    };
+
+    semakPengesahan();
+  }, []);
+
+  // Proses Log Masuk Modul Kaunter Farmasi
+  const tanganiLogMasukFarmasi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRalatLogin('');
+
+    const inputPengguna = usernameAtauEmail.trim();
+    if (!inputPengguna || !password) {
+      setRalatLogin('Sila masukkan username/e-mel dan kata laluan.');
+      return;
+    }
+
+    setSedangLogin(true);
+    try {
+      let emailUntukLogin = inputPengguna;
+
+      // Sokongan log masuk menggunakan Username (nama penuh atau awalan e-mel)
+      if (!emailUntukLogin.includes('@')) {
+        const { data: padanNama } = await supabase
+          .from('admin_profil')
+          .select('email')
+          .ilike('nama', inputPengguna)
+          .maybeSingle();
+
+        if (padanNama?.email) {
+          emailUntukLogin = padanNama.email;
+        } else {
+          const { data: padanPrefix } = await supabase
+            .from('admin_profil')
+            .select('email')
+            .ilike('email', `${inputPengguna}@%`)
+            .limit(1);
+
+          if (padanPrefix && padanPrefix.length > 0) {
+            emailUntukLogin = padanPrefix[0].email;
+          } else {
+            throw new Error('Username tidak dijumpai. Sila masukkan username atau e-mel yang sah.');
+          }
+        }
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: emailUntukLogin,
+        password
+      });
+
+      if (authError || !authData.user) {
+        throw new Error('Username/e-mel atau kata laluan tidak sah.');
+      }
+
+      const { data: profil } = await supabase
+        .from('admin_profil')
+        .select('nama')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      sessionStorage.setItem(KUNCI_SESI_FARMASI, 'true');
+      setNamaPetugas(profil?.nama || authData.user.email || 'Petugas Farmasi');
+      setUsernameAtauEmail('');
+      setPassword('');
+      setSudahLogMasuk(true);
+    } catch (err: any) {
+      setRalatLogin(err.message || 'Gagal log masuk. Sila cuba semula.');
+    } finally {
+      setSedangLogin(false);
+    }
+  };
+
+  // Log Keluar & Kunci Semula Modul Kaunter Farmasi
+  const tanganiLogKeluar = async () => {
+    sessionStorage.removeItem(KUNCI_SESI_FARMASI);
+    await supabase.auth.signOut();
+    setSudahLogMasuk(false);
+    setNamaPetugas('');
+    setSenaraiPesanan([]);
+    setPesananDipilih(null);
+  };
 
   // 1. Muat Data Pesakit di Kaunter Farmasi
   const muatDataFarmasi = async () => {
@@ -149,6 +287,9 @@ export default function KaunterFarmasi() {
   };
 
   useEffect(() => {
+    if (!sudahLogMasuk) return;
+
+    setSedangMemuat(true);
     muatDataFarmasi();
     const pemasa = setInterval(muatDataFarmasi, 3000);
 
@@ -162,7 +303,7 @@ export default function KaunterFarmasi() {
       clearInterval(pemasa);
       supabase.removeChannel(saluran);
     };
-  }, []);
+  }, [sudahLogMasuk]);
 
   const kiraJumlahBayaran = () => {
     if (!pesananDipilih || !pesananDipilih.sesi_rawatan) return 0;
@@ -177,7 +318,7 @@ export default function KaunterFarmasi() {
   };
 
   // =========================================================================
-  // CETAKAN RESIT THERMAL 58MM (DIKUNCI PADA 38MM SUPAYA MUAT 100% TANPA POTONG)
+  // CETAKAN RESIT THERMAL 58MM
   // =========================================================================
   const cetakResitThermal58mm = (resit: ResitCetak) => {
     if (!resit || typeof document === 'undefined') return;
@@ -430,7 +571,7 @@ export default function KaunterFarmasi() {
         minute: '2-digit'
       });
 
-      // A. Rekod Transaksi ke lejar_kewangan (beserta kolum wajib 'kategori')
+      // A. Rekod Transaksi ke lejar_kewangan
       if (jumlah > 0) {
         const rekodUtama: any = {
           no_resit: noResit,
@@ -450,7 +591,6 @@ export default function KaunterFarmasi() {
           .insert(rekodUtama);
 
         if (errLejar) {
-          // Sandaran kedua tanpa pesakit_id sekiranya terdapat kekangan kunci asing
           const { pesakit_id, ...rekodTanpaPesakit } = rekodUtama;
           const { error: errFallback } = await supabase
             .from('lejar_kewangan')
@@ -525,6 +665,205 @@ export default function KaunterFarmasi() {
       setMemproses(false);
     }
   };
+
+  // =========================================================================
+  // PAPARAN SEMAKAN SESI AWAL
+  // =========================================================================
+  if (sedangSemakSesi) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#0b1120', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Menyemak pengesahan keselamatan Kaunter Farmasi...</p>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // SKRIN LOG MASUK KESELAMATAN KAUNTER FARMASI
+  // =========================================================================
+  if (!sudahLogMasuk) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#0b1120',
+        color: '#f1f5f9',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        boxSizing: 'border-box'
+      }}>
+        <div style={{ width: '100%', maxWidth: '420px' }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <Link
+              href="/"
+              style={{
+                color: '#94a3b8',
+                fontSize: '0.84rem',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              <ArrowLeft size={15} /> Kembali ke Menu Utama
+            </Link>
+          </div>
+
+          <div style={{
+            backgroundColor: '#0f172a',
+            border: '1px solid #1e293b',
+            borderRadius: '1rem',
+            padding: '2rem 1.75rem',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.45)'
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '0.85rem',
+                backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '0.75rem'
+              }}>
+                <ShieldCheck size={28} color="#f59e0b" />
+              </div>
+
+              <h1 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+                Log Masuk Kaunter Farmasi
+              </h1>
+              <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.35rem 0 0 0' }}>
+                Sila masukkan <strong style={{ color: '#f59e0b' }}>Username</strong> dan <strong style={{ color: '#f59e0b' }}>Kata Laluan</strong> petugas untuk meneruskan
+              </p>
+            </div>
+
+            {ralatLogin && (
+              <div style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.14)',
+                border: '1px solid rgba(239, 68, 68, 0.45)',
+                color: '#fca5a5',
+                padding: '0.65rem 0.85rem',
+                borderRadius: '0.55rem',
+                fontSize: '0.8rem',
+                marginBottom: '1rem'
+              }}>
+                {ralatLogin}
+              </div>
+            )}
+
+            <form onSubmit={tanganiLogMasukFarmasi} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Username atau E-mel
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <User
+                    size={16}
+                    color="#64748b"
+                    style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)' }}
+                  />
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    autoComplete="username"
+                    placeholder="cth: admin atau admin@syifalink.com"
+                    value={usernameAtauEmail}
+                    onChange={(e) => setUsernameAtauEmail(e.target.value)}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '0.55rem',
+                      padding: '0.65rem 0.85rem 0.65rem 2.35rem',
+                      color: '#f8fafc',
+                      fontSize: '0.88rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                  Kata Laluan (Password)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <KeyRound
+                    size={16}
+                    color="#64748b"
+                    style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)' }}
+                  />
+                  <input
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    placeholder="Masukkan kata laluan"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '0.55rem',
+                      padding: '0.65rem 0.85rem 0.65rem 2.35rem',
+                      color: '#f8fafc',
+                      fontSize: '0.88rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={sedangLogin}
+                style={{
+                  marginTop: '0.35rem',
+                  width: '100%',
+                  padding: '0.72rem',
+                  backgroundColor: '#d97706',
+                  border: 'none',
+                  borderRadius: '0.55rem',
+                  color: '#ffffff',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: sedangLogin ? 'not-allowed' : 'pointer',
+                  opacity: sedangLogin ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  boxShadow: '0 4px 12px rgba(217, 119, 6, 0.3)'
+                }}
+              >
+                <LogIn size={17} /> {sedangLogin ? 'Mengesahkan...' : 'Masuk Kaunter Farmasi'}
+              </button>
+            </form>
+
+            <div style={{
+              marginTop: '1.25rem',
+              paddingTop: '0.9rem',
+              borderTop: '1px solid #1e293b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              fontSize: '0.74rem',
+              color: '#64748b'
+            }}>
+              <Lock size={12} /> Akses terhad kepada petugas farmasi &amp; pentadbir sahaja
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const jumlahBayaran = kiraJumlahBayaran();
 
@@ -676,11 +1015,11 @@ export default function KaunterFarmasi() {
                 <Package size={22} /> Kaunter Farmasi &amp; Pembayaran
               </h1>
               <p style={{ margin: '0.15rem 0 0 0', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 400 }}>
-                Pantau bungkusan penawar ruqyah, bantuan kerusi roda &amp; kutipan bayaran
+                Petugas bertugas: <strong>{namaPetugas}</strong> • Pantau bungkusan penawar &amp; kutipan bayaran
               </p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
               {resitUntukCetak && (
                 <button
                   type="button"
@@ -732,6 +1071,26 @@ export default function KaunterFarmasi() {
               }}>
                 Pesanan Menunggu: {senaraiPesanan.length}
               </span>
+
+              <button
+                type="button"
+                onClick={tanganiLogKeluar}
+                style={{
+                  backgroundColor: '#7f1d1d',
+                  color: '#fca5a5',
+                  border: '1px solid #991b1b',
+                  padding: '0.4rem 0.75rem',
+                  borderRadius: '0.45rem',
+                  fontWeight: 500,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+              >
+                <LogOut size={13} /> Keluar
+              </button>
             </div>
           </div>
         </div>
