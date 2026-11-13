@@ -4,7 +4,20 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import styles from './tv.module.css';
-import { Volume2, VolumeX, Users, Stethoscope, CloudSun, ArrowRight, X, Film, Play, Pause } from 'lucide-react';
+import {
+  Volume2,
+  VolumeX,
+  Users,
+  Stethoscope,
+  CloudSun,
+  ArrowRight,
+  X,
+  Film,
+  Play,
+  Pause,
+  Pill,
+  Clock
+} from 'lucide-react';
 
 interface InfoPanggilan {
   id: string;
@@ -33,9 +46,21 @@ interface ItemVideo {
   status_aktif: boolean;
 }
 
+type KodTemplateTV = 'klinik_klasik' | 'klinik_media' | 'klinik_puncak';
+
+// Corak Geometri Islamik Ringan (SVG Inline - Mesra GPU Android TV & Smart TV)
+const CORAK_ISLAMIK_TERANG = `url("data:image/svg+xml,%3Csvg width='64' height='64' viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%230f766e' stroke-opacity='0.06' stroke-width='1'%3E%3Cpath d='M32 4L40 24L60 32L40 40L32 60L24 40L4 32L24 24Z'/%3E%3Crect x='14' y='14' width='36' height='36' transform='rotate(45 32 32)'/%3E%3Ccircle cx='32' cy='32' r='8'/%3E%3C/g%3E%3C/svg%3E")`;
+
+const CORAK_ISLAMIK_SAND = `url("data:image/svg+xml,%3Csvg width='64' height='64' viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23785a28' stroke-opacity='0.07' stroke-width='1'%3E%3Cpath d='M32 4L40 24L60 32L40 40L32 60L24 40L4 32L24 24Z'/%3E%3Crect x='14' y='14' width='36' height='36' transform='rotate(45 32 32)'/%3E%3Ccircle cx='32' cy='32' r='8'/%3E%3C/g%3E%3C/svg%3E")`;
+
+const CORAK_ISLAMIK_GELAP = `url("data:image/svg+xml,%3Csvg width='64' height='64' viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%2334d399' stroke-opacity='0.09' stroke-width='1'%3E%3Cpath d='M32 4L40 24L60 32L40 40L32 60L24 40L4 32L24 24Z'/%3E%3Crect x='14' y='14' width='36' height='36' transform='rotate(45 32 32)'/%3E%3Ccircle cx='32' cy='32' r='8'/%3E%3C/g%3E%3C/svg%3E")`;
+
 export default function SkrinTVDewan() {
+  const [templateAktif, setTemplateAktif] = useState<KodTemplateTV>('klinik_klasik');
+
   const [masaSekarang, setMasaSekarang] = useState<string>('');
   const [tarikhSekarang, setTarikhSekarang] = useState<string>('');
+  const [sesiOperasi, setSesiOperasi] = useState<string>('Sesi Pagi');
   const [audioDibenarkan, setAudioDibenarkan] = useState<boolean>(false);
   const [isSkrinPenuh, setIsSkrinPenuh] = useState<boolean>(false);
 
@@ -46,23 +71,16 @@ export default function SkrinTVDewan() {
   const [videoDijedaManual, setVideoDijedaManual] = useState<boolean>(false);
   const [barHovered, setBarHovered] = useState<boolean>(false);
 
-  // Cuaca & Waktu Solat
-  const [suhuCuaca, setSuhuCuaca] = useState<string>('26°C');
-  const [statusCuaca, setStatusCuaca] = useState<string>('Mendung');
-  const [jadualSolat, setJadualSolat] = useState<{ [key: string]: string }>({
-    Subuh: '05:48',
-    Zohor: '13:00',
-    Asar: '16:20',
-    Maghrib: '18:58',
-    Isyak: '20:09'
-  });
-  const [solatAktif, setSolatAktif] = useState<string>('Maghrib');
+  // Cuaca Semasa
+  const [suhuCuaca, setSuhuCuaca] = useState<string>('27°C');
+  const [statusCuaca, setStatusCuaca] = useState<string>('Cerah');
 
-  // Panggilan & Senarai Bilik
+  // Panggilan, Status Bilik, Giliran Menunggu & Kaunter Farmasi
   const [panggilanTerkini, setPanggilanTerkini] = useState<InfoPanggilan | null>(null);
   const [semuaBilikStatus, setSemuaBilikStatus] = useState<any[]>([]);
   const [halamanBilik, setHalamanBilik] = useState<number>(0);
   const [senaraiMenunggu, setSenaraiMenunggu] = useState<any[]>([]);
+  const [senaraiFarmasi, setSenaraiFarmasi] = useState<any[]>([]);
   const [senaraiTicker, setSenaraiTicker] = useState<ItemTicker[]>([]);
 
   // Pemain Video TV
@@ -95,47 +113,6 @@ export default function SkrinTVDewan() {
   useEffect(() => {
     videoDijedaManualRef.current = videoDijedaManual;
   }, [videoDijedaManual]);
-
-  // Helper Pemformat Waktu Solat
-  const formatMasaSolat = (waktu: any): string => {
-    if (!waktu) return '--:--';
-    if (typeof waktu === 'number' || (!isNaN(Number(waktu)) && String(waktu).length >= 10)) {
-      const d = new Date(Number(waktu) * 1000);
-      return d.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', hour12: false });
-    }
-    return String(waktu);
-  };
-
-  const kiraSolatAktif = (jadual: { [key: string]: string }) => {
-    try {
-      const kini = new Date();
-      const minitSemasa = kini.getHours() * 60 + kini.getMinutes();
-
-      const tukarKeMinit = (masaStr: string) => {
-        if (!masaStr || !masaStr.includes(':')) return 0;
-        const [j, m] = masaStr.split(':').map(Number);
-        return j * 60 + m;
-      };
-
-      const mSubuh = tukarKeMinit(jadual.Subuh);
-      const mZohor = tukarKeMinit(jadual.Zohor);
-      const mAsar = tukarKeMinit(jadual.Asar);
-      const mMaghrib = tukarKeMinit(jadual.Maghrib);
-      const mIsyak = tukarKeMinit(jadual.Isyak);
-
-      if (minitSemasa >= mIsyak || minitSemasa < mSubuh) {
-        setSolatAktif('Isyak');
-      } else if (minitSemasa >= mMaghrib) {
-        setSolatAktif('Maghrib');
-      } else if (minitSemasa >= mAsar) {
-        setSolatAktif('Asar');
-      } else if (minitSemasa >= mZohor) {
-        setSolatAktif('Zohor');
-      } else if (minitSemasa >= mSubuh) {
-        setSolatAktif('Subuh');
-      }
-    } catch (e) {}
-  };
 
   // Kekalkan Skrin TV Sentiasa Menyala (Screen Wake Lock untuk Android TV / Smart TV)
   const aktifkanWakeLock = useCallback(async () => {
@@ -315,20 +292,35 @@ export default function SkrinTVDewan() {
     }
   }, [audioDibenarkan]);
 
-  // 2. Jam Digital
+  // 2. Jam Digital & Sesi Operasi Klinik
   useEffect(() => {
     const kemaskiniWaktu = () => {
       const kini = new Date();
       setMasaSekarang(kini.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' }));
-      setTarikhSekarang(kini.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
-      kiraSolatAktif(jadualSolat);
+      setTarikhSekarang(
+        kini.toLocaleDateString('ms-MY', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        })
+      );
+
+      const jam = kini.getHours();
+      if (jam < 13) {
+        setSesiOperasi('Sesi Pagi');
+      } else if (jam < 18) {
+        setSesiOperasi('Sesi Petang');
+      } else {
+        setSesiOperasi('Sesi Malam');
+      }
     };
     kemaskiniWaktu();
     const pemasa = setInterval(kemaskiniWaktu, 1000);
     return () => clearInterval(pemasa);
-  }, [jadualSolat]);
+  }, []);
 
-  // 3. Cuaca
+  // 3. Cuaca Semasa
   useEffect(() => {
     const ambilCuaca = async () => {
       try {
@@ -351,43 +343,38 @@ export default function SkrinTVDewan() {
     return () => clearInterval(pemasaCuaca);
   }, []);
 
-  // 4. Waktu Solat
-  useEffect(() => {
-    const ambilWaktuSolat = async () => {
-      try {
-        const res = await fetch('https://api.waktusolat.app/v2/solat/SGR01');
-        const data = await res.json();
-        if (data && data.prayers && data.prayers.length > 0) {
-          const p = data.prayers[0];
-          const jadualBaru = {
-            Subuh: formatMasaSolat(p.fajr),
-            Zohor: formatMasaSolat(p.dhuhr),
-            Asar: formatMasaSolat(p.asr),
-            Maghrib: formatMasaSolat(p.maghrib),
-            Isyak: formatMasaSolat(p.isha)
-          };
-          setJadualSolat(jadualBaru);
-          kiraSolatAktif(jadualBaru);
-        }
-      } catch (e) {}
-    };
-    ambilWaktuSolat();
-  }, []);
-
-  // 5. Muat Ticker Pengumuman
-  const muatDataPengumuman = async () => {
+  // 4. Muat Ticker Pengumuman & Tetapan Templat TV Aktif dari Admin
+  const muatDataPengumumanDanTemplate = useCallback(async () => {
     try {
-      const { data } = await supabase
+      const { data: dataTicker } = await supabase
         .from('pengumuman_ticker')
         .select('*')
         .eq('status_aktif', true)
         .order('turutan', { ascending: true });
 
-      if (data && data.length > 0) setSenaraiTicker(data);
-    } catch (err) {}
-  };
+      if (dataTicker && dataTicker.length > 0) {
+        const tapisTicker = dataTicker.filter((t) => t.rujukan !== '__SYSTEM_TEMPLATE_TV__');
+        if (tapisTicker.length > 0) setSenaraiTicker(tapisTicker);
+      }
 
-  // 6. Pengurusan Video Siaran TV
+      const { data: dataTemplate } = await supabase
+        .from('pengumuman_ticker')
+        .select('teks_maksud')
+        .eq('rujukan', '__SYSTEM_TEMPLATE_TV__')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (dataTemplate?.teks_maksud) {
+        const kod = dataTemplate.teks_maksud as KodTemplateTV;
+        if (kod === 'klinik_klasik' || kod === 'klinik_media' || kod === 'klinik_puncak') {
+          setTemplateAktif(kod);
+        }
+      }
+    } catch (err) {}
+  }, []);
+
+  // 5. Pengurusan Video Siaran TV
   const muatDataVideo = async () => {
     try {
       const { data: videoData } = await supabase
@@ -538,7 +525,7 @@ export default function SkrinTVDewan() {
   };
 
   // ========================================================
-  // 7. SISTEM AUDIO PANGGILAN GILIRAN (LOCENG + SUARA MELAYU)
+  // 6. SISTEM AUDIO PANGGILAN GILIRAN (LOCENG + SUARA MELAYU)
   // ========================================================
   const janaTeksSebutanMelayu = (noGiliran: string, bilik: string, namaPerawat: string) => {
     const abjad = noGiliran.charAt(0).toUpperCase();
@@ -647,7 +634,7 @@ export default function SkrinTVDewan() {
     [redakanAudioVideoLatar, pulihkanAudioVideoLatar]
   );
 
-  // 8. Muat Data Skrin & Status Bilik (Masa Nyata)
+  // 7. Muat Data Skrin, Status Bilik, Menunggu & Farmasi (Masa Nyata)
   const muatDataSkrin = useCallback(async () => {
     try {
       const { data: bilikData } = await supabase
@@ -743,15 +730,28 @@ export default function SkrinTVDewan() {
         setSemuaBilikStatus(bilikKemaskini);
       }
 
+      // Senarai Menunggu (Sehingga 12 nombor untuk Mod Waktu Puncak)
       const { data: menungguData } = await supabase
         .from('giliran')
         .select('no_giliran')
         .eq('status', 'menunggu')
         .order('created_at', { ascending: true })
-        .limit(6);
+        .limit(12);
 
       if (menungguData) {
         setSenaraiMenunggu(menungguData);
+      }
+
+      // Senarai Kaunter Farmasi (Pesakit sedia ambil penawar)
+      const { data: farmasiData } = await supabase
+        .from('giliran')
+        .select('no_giliran, pesakit(nama)')
+        .eq('status', 'farmasi')
+        .order('updated_at', { ascending: false })
+        .limit(8);
+
+      if (farmasiData) {
+        setSenaraiFarmasi(farmasiData);
       }
     } catch (err) {
       console.error('Ralat kemaskini TV:', err);
@@ -760,7 +760,7 @@ export default function SkrinTVDewan() {
 
   useEffect(() => {
     muatDataSkrin();
-    muatDataPengumuman();
+    muatDataPengumumanDanTemplate();
     const intervalPoll = setInterval(muatDataSkrin, 2000);
 
     const saluran = supabase
@@ -768,15 +768,18 @@ export default function SkrinTVDewan() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'giliran' }, () => muatDataSkrin())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bilik_rawatan' }, () => muatDataSkrin())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'perawat' }, () => muatDataSkrin())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pengumuman_ticker' }, () =>
+        muatDataPengumumanDanTemplate()
+      )
       .subscribe();
 
     return () => {
       clearInterval(intervalPoll);
       supabase.removeChannel(saluran);
     };
-  }, [muatDataSkrin]);
+  }, [muatDataSkrin, muatDataPengumumanDanTemplate]);
 
-  // 9. Penggiliran Paparan Bilik & Kawalan Remote TV
+  // 8. Penggiliran Paparan Bilik & Kawalan Remote TV (D-Pad Android TV / Smart TV)
   const jumlahHalaman = Math.max(1, Math.ceil(semuaBilikStatus.length / 4));
 
   useEffect(() => {
@@ -810,6 +813,12 @@ export default function SkrinTVDewan() {
         if (jumlahHalaman > 1) {
           setHalamanBilik((prev) => (prev - 1 + jumlahHalaman) % jumlahHalaman);
         }
+      } else if (e.key === '1') {
+        setTemplateAktif('klinik_klasik');
+      } else if (e.key === '2') {
+        setTemplateAktif('klinik_media');
+      } else if (e.key === '3') {
+        setTemplateAktif('klinik_puncak');
       }
     };
 
@@ -822,6 +831,279 @@ export default function SkrinTVDewan() {
     videoSemasa && (videoSemasa.jenis === 'mp4' || videoSemasa.url_video.toLowerCase().includes('.mp4'))
   );
 
+  // Konfigurasi Tema Mengikut Templat Aktif
+  const isSand = templateAktif === 'klinik_media';
+  const isEmeraldDark = templateAktif === 'klinik_puncak';
+
+  const bgUtama = isEmeraldDark ? '#04231d' : isSand ? '#f6f1e7' : '#eef6f6';
+  const bgCorak = isEmeraldDark
+    ? CORAK_ISLAMIK_GELAP
+    : isSand
+    ? CORAK_ISLAMIK_SAND
+    : CORAK_ISLAMIK_TERANG;
+
+  const warnaHeaderBg = isEmeraldDark
+    ? '#063229'
+    : isSand
+    ? '#fffdf9'
+    : '#ffffff';
+  const warnaHeaderBorder = isEmeraldDark
+    ? 'rgba(52, 211, 153, 0.25)'
+    : isSand
+    ? 'rgba(180, 134, 65, 0.28)'
+    : 'rgba(13, 148, 136, 0.22)';
+  const warnaTajukKlinik = isEmeraldDark ? '#f8fafc' : isSand ? '#1b4332' : '#0f2942';
+  const warnaSubtajuk = isEmeraldDark ? '#6ee7b7' : isSand ? '#785a28' : '#0d9488';
+
+  // Komponen Pemain Video Dikongsi antara Templat 1 & Templat 2
+  const renderKotakVideo = (minHeightStr: string) => (
+    <div
+      style={{
+        height: '100%',
+        minHeight: minHeightStr,
+        backgroundColor: '#022432',
+        borderRadius: '1.1rem',
+        overflow: 'hidden',
+        border: isSand ? '2px solid rgba(180, 134, 65, 0.35)' : '2px solid rgba(255, 255, 255, 0.18)',
+        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.22)',
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      {videoSemasa ? (
+        isVideoMp4 ? (
+          <video
+            ref={videoPlayerRef}
+            key={videoSemasa.id}
+            src={videoSemasa.url_video}
+            autoPlay
+            muted={!audioDibenarkan || videoSemasa.kelantangan_audio === 0}
+            playsInline
+            preload="auto"
+            loop={videoSemasa.loop_tunggal || senaraiVideo.length === 1}
+            onLoadedData={() => selarasAudioVideo(audioDibenarkanRef.current)}
+            onPlay={() => {
+              setVideoDijedaManual(false);
+              videoDijedaManualRef.current = false;
+            }}
+            onPause={() => {
+              if (!sedangPanggilRef.current) {
+                setVideoDijedaManual(true);
+                videoDijedaManualRef.current = true;
+              }
+            }}
+            onEnded={tanganiVideoTamat}
+            onError={() => {
+              setTimeout(tanganiVideoTamat, 2500);
+            }}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+              pointerEvents: 'auto'
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              position: 'relative',
+              backgroundColor: '#022432'
+            }}
+          >
+            <iframe
+              ref={iframePlayerRef}
+              key={videoSemasa.id}
+              src={janaYouTubeEmbedUrl(
+                videoSemasa.url_video,
+                videoSemasa.loop_tunggal || senaraiVideo.length === 1
+              )}
+              title={videoSemasa.tajuk}
+              onLoad={() => {
+                setTimeout(() => {
+                  if (iframePlayerRef.current?.contentWindow) {
+                    iframePlayerRef.current.contentWindow.postMessage(
+                      JSON.stringify({ event: 'listening', id: 1 }),
+                      '*'
+                    );
+                  }
+                  selarasAudioVideo(audioDibenarkanRef.current);
+                }, 1200);
+              }}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: '106%',
+                height: '152%',
+                transform: 'translate(-50%, -50%)',
+                border: 'none',
+                pointerEvents: 'auto'
+              }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+              allowFullScreen
+            />
+          </div>
+        )
+      ) : (
+        <div
+          style={{
+            color: '#94a3b8',
+            fontSize: '0.88rem',
+            textAlign: 'center',
+            padding: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}
+        >
+          <Film size={30} color="#0d9488" opacity={0.7} />
+          <span style={{ fontWeight: 600 }}>Tiada video siaran aktif.</span>
+          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Tetapkan di Pusat Pentadbir (/admin)</span>
+        </div>
+      )}
+
+      {/* ZON HOVER KHUSUS DI BAWAH VIDEO: MUNCUL HANYA APABILA KURSOR DIARAHKAN PADANYA */}
+      {videoSemasa && (
+        <div
+          className={`video-bottom-trigger ${barHovered ? 'is-hovered' : ''}`}
+          onMouseEnter={() => setBarHovered(true)}
+          onMouseLeave={() => {
+            setBarHovered(false);
+            if (document.activeElement instanceof HTMLElement) {
+              document.activeElement.blur();
+            }
+          }}
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '52px',
+            zIndex: 35,
+            display: 'flex',
+            alignItems: 'flex-end',
+            padding: '0 10px 10px 10px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div
+            className="video-bottom-bar"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+              opacity: barHovered ? 1 : 0,
+              visibility: barHovered ? 'visible' : 'hidden',
+              transform: barHovered ? 'translateY(0)' : 'translateY(6px)',
+              pointerEvents: barHovered ? 'auto' : 'none',
+              transition: 'opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease'
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'rgba(15, 23, 42, 0.88)',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '0.5rem',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                color: '#ffffff',
+                maxWidth: '65%',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
+              }}
+            >
+              <Film size={13} color="#38bdf8" />
+              <span>{videoSemasa.tajuk}</span>
+              <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
+                • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
+              </span>
+            </div>
+
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+              <button
+                type="button"
+                onClick={togglePlayPauseVideo}
+                className="tv-remote-focus"
+                title={videoDijedaManual ? 'Mainkan Video (Play)' : 'Jedakan Video (Pause)'}
+                style={{
+                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  borderRadius: '0.5rem',
+                  padding: '0.35rem 0.7rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                }}
+              >
+                {videoDijedaManual ? (
+                  <>
+                    <Play size={14} color="#34d399" /> Main
+                  </>
+                ) : (
+                  <>
+                    <Pause size={14} color="#fbbf24" /> Jeda
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!audioDibenarkanRef.current) {
+                    aktifkanSkrinPenuhDanAudio();
+                  } else {
+                    selarasAudioVideo(true);
+                  }
+                }}
+                className="tv-remote-focus"
+                title="Pulihkan Audio Video"
+                style={{
+                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                  color: '#38bdf8',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  borderRadius: '0.5rem',
+                  padding: '0.35rem 0.55rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
+                }}
+              >
+                {audioDibenarkan && (videoSemasa.kelantangan_audio ?? 20) > 0 ? (
+                  <Volume2 size={15} />
+                ) : (
+                  <VolumeX size={15} color="#f87171" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className={styles.tvContainer}
@@ -830,7 +1112,11 @@ export default function SkrinTVDewan() {
         height: '100vh',
         overflow: 'hidden',
         userSelect: 'none',
-        WebkitUserSelect: 'none'
+        WebkitUserSelect: 'none',
+        backgroundColor: bgUtama,
+        backgroundImage: bgCorak,
+        backgroundRepeat: 'repeat',
+        transition: 'background-color 0.35s ease'
       }}
       onClick={() => {
         if (!audioDibenarkanRef.current) {
@@ -844,11 +1130,11 @@ export default function SkrinTVDewan() {
           0%, 100% {
             opacity: 1;
             transform: scale(1);
-            filter: drop-shadow(0 0 25px rgba(250, 204, 21, 0.95));
+            filter: drop-shadow(0 0 22px rgba(250, 204, 21, 0.95));
           }
           50% {
-            opacity: 0.18;
-            transform: scale(1.04);
+            opacity: 0.22;
+            transform: scale(1.03);
             filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.25));
           }
         }
@@ -888,7 +1174,9 @@ export default function SkrinTVDewan() {
       <div className={styles.contentWrapper}>
         {!audioDibenarkan && (
           <div className={styles.audioBanner} style={{ padding: '0.38rem 0.9rem', fontSize: '0.8rem' }}>
-            <span>Tekan <strong>OK</strong> pada Remote TV atau klik butang di sebelah untuk mengaktifkan suara &amp; video TV.</span>
+            <span>
+              Tekan <strong>OK</strong> pada Remote TV atau klik butang di sebelah untuk mengaktifkan suara panggilan &amp; skrin penuh.
+            </span>
             <button
               ref={btnAktifRef}
               type="button"
@@ -904,718 +1192,1201 @@ export default function SkrinTVDewan() {
         )}
 
         {/* ========================================================
-            HEADER ATAS (DIPADATKAN SUPAYA JAM MUAT PENUH SKRIN TV)
+            HEADER ATAS KHUSUS OPERASI KLINIK (TANPA TAQWIM SOLAT)
             ======================================================== */}
         <header
           className={styles.topBar}
           style={{
-            padding: '0.38rem 0.95rem',
-            gap: '0.5rem',
+            padding: '0.4rem 1rem',
+            gap: '0.65rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            backgroundColor: warnaHeaderBg,
+            borderBottom: `1.5px solid ${warnaHeaderBorder}`,
+            borderRadius: '0.85rem'
           }}
         >
-          {/* PENJENAMAAN KLINIK */}
-          <div className={styles.clinicBrand} style={{ gap: '0.5rem', minWidth: 0, flex: '1 1 auto' }}>
-            <img src="/logo.png" alt="SyifaLink" className={styles.logoImage} style={{ width: '34px', height: '34px', flexShrink: 0 }} />
+          {/* PENJENAMAAN PUSAT RAWATAN */}
+          <div className={styles.clinicBrand} style={{ gap: '0.55rem', minWidth: 0, flex: '1 1 auto' }}>
+            <img
+              src="/logo.png"
+              alt="SyifaLink"
+              className={styles.logoImage}
+              style={{ width: '36px', height: '36px', flexShrink: 0 }}
+            />
             <div style={{ minWidth: 0 }}>
-              <span className={styles.welcomeText} style={{ fontSize: '0.66rem', display: 'block', lineHeight: 1.1 }}>
-                Selamat Datang ke
+              <span
+                className={styles.welcomeText}
+                style={{ fontSize: '0.68rem', display: 'block', lineHeight: 1.1, color: warnaSubtajuk, fontWeight: 700 }}
+              >
+                Klinik Pengubatan Islam • Ruang Menunggu Pesakit
               </span>
               <h1
                 className={styles.clinicTitleText}
                 style={{
-                  fontSize: '0.95rem',
+                  fontSize: '0.98rem',
                   lineHeight: 1.15,
+                  color: warnaTajukKlinik,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}
               >
-                Pusat Rawatan Islam Darussyifa&apos;
+                Pusat Rawatan Islam Darul Syifa&apos;
               </h1>
             </div>
           </div>
 
-          {/* CUACA & TAKWIM SOLAT */}
-          <div className={styles.islamicInfoBar} style={{ gap: '0.45rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-            {/* PIL LAPORAN CUACA */}
-            <div 
-              className={styles.weatherWidget}
+          {/* STATUS OPERASI KLINIK & CUACA */}
+          <div style={{ gap: '0.45rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            {/* PIL SESI KLINIK */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                backgroundColor: isEmeraldDark ? 'rgba(16, 185, 129, 0.16)' : isSand ? '#efe7d6' : '#e6f4f1',
+                padding: '0.32rem 0.65rem',
+                borderRadius: '0.55rem',
+                border: isEmeraldDark
+                  ? '1px solid rgba(52, 211, 153, 0.35)'
+                  : isSand
+                  ? '1px solid rgba(180, 134, 65, 0.35)'
+                  : '1px solid rgba(13, 148, 136, 0.25)'
+              }}
+            >
+              <Clock size={15} color={isEmeraldDark ? '#34d399' : isSand ? '#785a28' : '#0d9488'} />
+              <span
+                style={{
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: isEmeraldDark ? '#d1fae5' : isSand ? '#1b4332' : '#0f2942',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {sesiOperasi}
+              </span>
+            </div>
+
+            {/* PIL BILANGAN MENUNGGU & FARMASI */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                backgroundColor: isEmeraldDark ? 'rgba(6, 78, 59, 0.55)' : isSand ? '#efe7d6' : '#f1f5f9',
+                padding: '0.32rem 0.7rem',
+                borderRadius: '0.55rem',
+                border: isEmeraldDark
+                  ? '1px solid rgba(52, 211, 153, 0.25)'
+                  : '1px solid rgba(148, 163, 184, 0.25)'
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: isEmeraldDark ? '#fde047' : '#0284c7',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Users size={14} /> Menunggu: {senaraiMenunggu.length}
+              </span>
+
+              <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>|</span>
+
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: isEmeraldDark ? '#6ee7b7' : '#059669',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Pill size={14} /> Farmasi: {senaraiFarmasi.length}
+              </span>
+            </div>
+
+            {/* PIL CUACA SEMASA */}
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.32rem',
-                backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                padding: '0.3rem 0.6rem',
+                backgroundColor: isEmeraldDark ? 'rgba(15, 23, 42, 0.65)' : '#0f2942',
+                padding: '0.32rem 0.65rem',
                 borderRadius: '0.55rem',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)'
+                border: '1px solid rgba(56, 189, 248, 0.3)'
               }}
             >
-              <CloudSun size={16} color="#38bdf8" />
-              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap' }}>
+              <CloudSun size={15} color="#38bdf8" />
+              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap' }}>
                 {suhuCuaca} ({statusCuaca})
               </span>
-            </div>
-
-            {/* STRIP TAKWIM SOLAT */}
-            <div 
-              className={styles.prayerTimesStrip}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.42rem',
-                backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                padding: '0.28rem 0.6rem',
-                borderRadius: '0.55rem',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)'
-              }}
-            >
-              {Object.entries(jadualSolat).map(([namaSolat, waktu]) => (
-                <div
-                  key={namaSolat}
-                  className={`${styles.prayerItem} ${solatAktif === namaSolat ? styles.prayerActive : ''}`}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    padding: '0.08rem 0.3rem',
-                    borderRadius: '0.3rem',
-                    backgroundColor: solatAktif === namaSolat ? 'rgba(56, 189, 248, 0.18)' : 'transparent'
-                  }}
-                >
-                  <span style={{
-                    fontSize: '0.6rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: solatAktif === namaSolat ? '#38bdf8' : '#94a3b8',
-                    letterSpacing: '0.02em',
-                    lineHeight: 1.1
-                  }}>
-                    {namaSolat}
-                  </span>
-                  <span style={{
-                    fontSize: '0.82rem',
-                    fontWeight: 800,
-                    color: solatAktif === namaSolat ? '#38bdf8' : '#ffffff',
-                    marginTop: '0.04rem',
-                    lineHeight: 1.15
-                  }}>
-                    {formatMasaSolat(waktu)}
-                  </span>
-                </div>
-              ))}
             </div>
           </div>
 
           {/* JAM DIGITAL & TARIKH */}
-          <div className={styles.clockArea} style={{ flexShrink: 0, textAlign: 'right', paddingLeft: '0.25rem' }}>
-            <div className={styles.digitalTime} style={{ fontSize: '1.22rem', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+          <div className={styles.clockArea} style={{ flexShrink: 0, textAlign: 'right', paddingLeft: '0.2rem' }}>
+            <div
+              className={styles.digitalTime}
+              style={{
+                fontSize: '1.24rem',
+                lineHeight: 1.1,
+                whiteSpace: 'nowrap',
+                color: isEmeraldDark ? '#facc15' : isSand ? '#1b4332' : '#0f2942'
+              }}
+            >
               {masaSekarang}
             </div>
-            <div className={styles.digitalDate} style={{ fontSize: '0.65rem', whiteSpace: 'nowrap' }}>
+            <div
+              className={styles.digitalDate}
+              style={{
+                fontSize: '0.66rem',
+                whiteSpace: 'nowrap',
+                color: isEmeraldDark ? '#a7f3d0' : '#64748b'
+              }}
+            >
               {tarikhSekarang}
             </div>
           </div>
         </header>
 
-        <div className={styles.mainLayout} style={{ gap: '0.75rem' }}>
-          {/* ========================================================
-              BARIS 1 KIRI: SEDANG DIPANGGIL
-              ======================================================== */}
-          <section 
-            className={styles.nowSeeingCard}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0.65rem 0.9rem',
-              height: '100%',
-              boxSizing: 'border-box',
-              overflow: 'hidden'
-            }}
-          >
-            <div className={styles.nowSeeingHeader} style={{ marginBottom: 0 }}>
-              <span className={styles.nowSeeingTitle} style={{ fontSize: '0.85rem' }}>SEDANG DIPANGGIL</span>
-              <span className={styles.nowSeeingSubtitle} style={{ fontSize: '0.68rem' }}>NOMBOR GILIRAN</span>
-            </div>
-
-            {panggilanTerkini ? (
-              <>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0.1rem 0',
-                  width: '100%'
-                }}>
-                  <div 
-                    className={styles.activeNumber}
-                    style={{
-                      fontSize: 'clamp(2.9rem, 4.8vw, 4.3rem)',
-                      lineHeight: 1,
-                      margin: '0 0 0.15rem 0',
-                      animation: sedangPanggilAudio ? 'kelipNomborPanggilan 0.65s infinite ease-in-out' : 'none',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    {panggilanTerkini.noGiliran}
-                    {panggilanTerkini.perluKerusiRoda && (
-                      <span className={styles.wheelchairIcon} title="Pesakit Memerlukan Kerusi Roda">♿</span>
-                    )}
-                  </div>
-
-                  <div 
-                    className={styles.patientName}
-                    style={{
-                      fontSize: 'clamp(1.15rem, 1.75vw, 1.55rem)',
-                      fontWeight: 700,
-                      lineHeight: 1.15,
-                      textShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                      maxWidth: '96%',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}
-                  >
-                    {panggilanTerkini.namaPesakit}
-                  </div>
-                </div>
-
-                <div 
-                  className={styles.proceedBox}
-                  style={{
-                    margin: 0,
-                    padding: '0.5rem 0.9rem',
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <div 
-                    className={styles.proceedLabel}
-                    style={{
-                      fontSize: '0.88rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.04em',
-                      marginBottom: '0.08rem'
-                    }}
-                  >
-                    Sila Masuk Ke
-                  </div>
-
-                  <div 
-                    className={styles.roomDestinationRow}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.55rem',
-                      margin: '0.05rem 0'
-                    }}
-                  >
-                    <span 
-                      className={styles.roomDestination}
-                      style={{
-                        fontSize: 'clamp(1.75rem, 2.8vw, 2.3rem)',
-                        fontWeight: 900,
-                        lineHeight: 1,
-                        letterSpacing: '0.02em'
-                      }}
-                    >
-                      {panggilanTerkini.bilik}
-                    </span>
-                    <div 
-                      className={styles.arrowCircle}
-                      style={{
-                        width: '30px',
-                        height: '30px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <ArrowRight size={18} strokeWidth={3.5} />
-                    </div>
-                  </div>
-
-                  <div 
-                    className={styles.perawatName}
-                    style={{
-                      fontSize: '0.94rem',
-                      fontWeight: 700,
-                      marginTop: '0.15rem',
-                      color: '#ffffff',
-                      maxWidth: '96%',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      textShadow: '0 2px 6px rgba(0,0,0,0.35)'
-                    }}
-                  >
-                    Bersama <strong style={{ color: '#fef08a' }}>{panggilanTerkini.namaPerawat}</strong>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className={styles.emptyCallContent} style={{ margin: 'auto 0' }}>
-                <Volume2 size={42} style={{ opacity: 0.6, marginBottom: '0.35rem' }} />
-                <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>
-                  Sila nantikan nombor anda diumumkan
-                </p>
-              </div>
-            )}
-          </section>
-
-          {/* ========================================================
-              BARIS 1 KANAN: STATUS BILIK RAWATAN
-              ======================================================== */}
-          <section
-            className={styles.doctorStatusCard}
-            style={{
-              padding: '0.65rem 0.9rem',
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100%',
-              boxSizing: 'border-box',
-              overflow: 'hidden'
-            }}
-          >
-            <div className={styles.doctorStatusHeader} style={{ marginBottom: '0.4rem', flexShrink: 0 }}>
-              <span className={styles.doctorStatusTitle} style={{ fontSize: '0.92rem', fontWeight: 800 }}>
-                <Stethoscope size={18} /> STATUS BILIK RAWATAN
-              </span>
-              {semuaBilikStatus.length > 4 && (
-                <span className={styles.pageIndicatorPill} style={{ fontSize: '0.74rem', fontWeight: 700, padding: '0.18rem 0.55rem' }}>
-                  Paparan {halamanBilik + 1} / {jumlahHalaman}
-                </span>
-              )}
-            </div>
-
-            <div
-              className={styles.doctorStatusList}
+        {/* ========================================================
+            TEMPLAT 1: KLASIK KLINIK (SEIMBANG + CORAK ISLAMIK SANTAI)
+            ======================================================== */}
+        {templateAktif === 'klinik_klasik' && (
+          <div className={styles.mainLayout} style={{ gap: '0.75rem' }}>
+            {/* BARIS 1 KIRI: SEDANG DIPANGGIL (WARNA TEAL KLINIK DIKEMBALIKAN) */}
+            <section
+              className={styles.nowSeeingCard}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.38rem',
-                flex: 1,
+                alignItems: 'center',
                 justifyContent: 'space-between',
+                padding: '0.7rem 0.95rem',
+                height: '100%',
+                boxSizing: 'border-box',
+                overflow: 'hidden',
+                borderRadius: '1.1rem',
+                borderTop: '4px solid #facc15',
+                backgroundColor: '#046c7a',
+                backgroundImage: `${CORAK_ISLAMIK_GELAP}, linear-gradient(155deg, #078494 0%, #046272 55%, #02424f 100%)`,
+                boxShadow: '0 10px 25px rgba(2, 66, 79, 0.28)',
+                color: '#ffffff'
+              }}
+            >
+              <div className={styles.nowSeeingHeader} style={{ marginBottom: 0, textAlign: 'center' }}>
+                <span
+                  className={styles.nowSeeingTitle}
+                  style={{ fontSize: '0.85rem', letterSpacing: '0.08em', color: '#fef08a', fontWeight: 800, display: 'block' }}
+                >
+                  ✦ SEDANG DIPANGGIL ✦
+                </span>
+                <span
+                  className={styles.nowSeeingSubtitle}
+                  style={{ fontSize: '0.68rem', color: '#cffafe', fontWeight: 600, letterSpacing: '0.05em' }}
+                >
+                  NOMBOR GILIRAN RAWATAN
+                </span>
+              </div>
+
+              {panggilanTerkini ? (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0.1rem 0',
+                      width: '100%'
+                    }}
+                  >
+                    <div
+                      className={styles.activeNumber}
+                      style={{
+                        fontSize: 'clamp(2.9rem, 4.8vw, 4.3rem)',
+                        fontWeight: 900,
+                        color: '#a3e635',
+                        lineHeight: 1,
+                        margin: '0 0 0.15rem 0',
+                        textShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
+                        animation: sedangPanggilAudio ? 'kelipNomborPanggilan 0.65s infinite ease-in-out' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {panggilanTerkini.noGiliran}
+                      {panggilanTerkini.perluKerusiRoda && (
+                        <span className={styles.wheelchairIcon} title="Pesakit Memerlukan Kerusi Roda">
+                          ♿
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      className={styles.patientName}
+                      style={{
+                        fontSize: 'clamp(1.15rem, 1.75vw, 1.55rem)',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        lineHeight: 1.15,
+                        textShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                        maxWidth: '96%',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {panggilanTerkini.namaPesakit}
+                    </div>
+                  </div>
+
+                  <div
+                    className={styles.proceedBox}
+                    style={{
+                      margin: 0,
+                      padding: '0.55rem 0.9rem',
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxSizing: 'border-box',
+                      backgroundColor: 'rgba(2, 42, 52, 0.58)',
+                      border: '1.5px solid rgba(250, 204, 21, 0.45)',
+                      borderRadius: '0.85rem'
+                    }}
+                  >
+                    <div
+                      className={styles.proceedLabel}
+                      style={{
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        color: '#e0f2fe',
+                        letterSpacing: '0.04em',
+                        marginBottom: '0.08rem'
+                      }}
+                    >
+                      Sila Masuk Ke
+                    </div>
+
+                    <div
+                      className={styles.roomDestinationRow}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.55rem',
+                        margin: '0.05rem 0'
+                      }}
+                    >
+                      <span
+                        className={styles.roomDestination}
+                        style={{
+                          fontSize: 'clamp(1.75rem, 2.8vw, 2.3rem)',
+                          fontWeight: 900,
+                          color: '#ffffff',
+                          lineHeight: 1,
+                          letterSpacing: '0.02em'
+                        }}
+                      >
+                        {panggilanTerkini.bilik}
+                      </span>
+                      <div
+                        className={styles.arrowCircle}
+                        style={{
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '9999px',
+                          backgroundColor: '#84cc16',
+                          color: '#022c22',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <ArrowRight size={18} strokeWidth={3.5} />
+                      </div>
+                    </div>
+
+                    <div
+                      className={styles.perawatName}
+                      style={{
+                        fontSize: '0.94rem',
+                        fontWeight: 700,
+                        marginTop: '0.15rem',
+                        color: '#ffffff',
+                        maxWidth: '96%',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        textShadow: '0 2px 6px rgba(0,0,0,0.35)'
+                      }}
+                    >
+                      Bersama <strong style={{ color: '#fef08a' }}>{panggilanTerkini.namaPerawat}</strong>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.emptyCallContent} style={{ margin: 'auto 0', color: '#e0f2fe', textAlign: 'center' }}>
+                  <Volume2 size={42} style={{ opacity: 0.75, marginBottom: '0.35rem' }} />
+                  <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>
+                    Sila nantikan nombor giliran anda diumumkan
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {/* BARIS 1 KANAN: STATUS BILIK RAWATAN */}
+            <section
+              className={styles.doctorStatusCard}
+              style={{
+                padding: '0.65rem 0.9rem',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                boxSizing: 'border-box',
+                overflow: 'hidden'
+              }}
+            >
+              <div className={styles.doctorStatusHeader} style={{ marginBottom: '0.4rem', flexShrink: 0 }}>
+                <span className={styles.doctorStatusTitle} style={{ fontSize: '0.92rem', fontWeight: 800 }}>
+                  <Stethoscope size={18} /> STATUS BILIK RAWATAN KLINIK
+                </span>
+                {semuaBilikStatus.length > 4 && (
+                  <span
+                    className={styles.pageIndicatorPill}
+                    style={{ fontSize: '0.74rem', fontWeight: 700, padding: '0.18rem 0.55rem' }}
+                  >
+                    Paparan {halamanBilik + 1} / {jumlahHalaman}
+                  </span>
+                )}
+              </div>
+
+              <div
+                className={styles.doctorStatusList}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.38rem',
+                  flex: 1,
+                  justifyContent: 'space-between',
+                  minHeight: 0
+                }}
+              >
+                {bilikDipaparkan.map((b) => {
+                  const adaUstaz = Boolean(b.ustazNama);
+                  const sedangAktif = Boolean(b.sedangMerawat);
+
+                  return (
+                    <div
+                      key={b.id}
+                      className={`${styles.roomRow} ${sedangAktif ? styles.roomRowBusy : ''}`}
+                      style={{
+                        padding: '0.38rem 0.8rem',
+                        borderRadius: '0.6rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.65rem',
+                        flex: 1,
+                        minHeight: 0
+                      }}
+                    >
+                      <div style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            fontSize: '0.96rem',
+                            fontWeight: 800,
+                            color: '#0f2942',
+                            letterSpacing: '0.02em',
+                            lineHeight: 1.15
+                          }}
+                        >
+                          {b.namaBilik}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.76rem',
+                            fontWeight: 600,
+                            color: adaUstaz ? '#0284c7' : '#64748b',
+                            marginTop: '0.1rem',
+                            lineHeight: 1.15,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {adaUstaz ? b.ustazNama : <span className={styles.rehatText}>Rehat / Kosong</span>}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        {sedangAktif ? (
+                          <span
+                            className={styles.statusSeeing}
+                            style={{
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <span className={styles.pulseDot} style={{ width: '7px', height: '7px' }}></span>
+                            {b.statusRawatan === 'dipanggil' ? 'Sedang Dipanggil' : 'Sedang Merawat'} (
+                            <strong>{b.noGiliranAktif}</strong>)
+                          </span>
+                        ) : adaUstaz ? (
+                          <span
+                            className={styles.statusAvailable}
+                            style={{ fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                          >
+                            Sedia Menerima Pesakit
+                          </span>
+                        ) : (
+                          <span
+                            className={styles.statusClosed}
+                            style={{ fontSize: '0.78rem', fontWeight: 500, fontStyle: 'italic', opacity: 0.85, whiteSpace: 'nowrap' }}
+                          >
+                            Bilik Tidak Beroperasi
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ flexShrink: 0 }}>
+                        {sedangAktif ? (
+                          <div className={styles.badgeBusyPill} style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.2rem 0.6rem' }}>
+                            Aktif
+                          </div>
+                        ) : adaUstaz ? (
+                          <div
+                            className={styles.badgeAvailablePill}
+                            style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.2rem 0.6rem' }}
+                          >
+                            Tersedia
+                          </div>
+                        ) : (
+                          <div className={styles.badgeClosedPill} style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem' }}>
+                            Tutup
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* BARIS 2 KIRI: PEMAIN VIDEO */}
+            {renderKotakVideo('185px')}
+
+            {/* BARIS 2 KANAN: GILIRAN MENUNGGU & SEDIA DI FARMASI */}
+            <div
+              className={styles.waitingBoxCard}
+              style={{
+                padding: '0.65rem 0.9rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '0.45rem'
+              }}
+            >
+              <div>
+                <div className={styles.waitingHeaderRow} style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                  <Users size={16} />
+                  <span>GILIRAN MENUNGGU SETERUSNYA</span>
+                </div>
+
+                {senaraiMenunggu.length === 0 ? (
+                  <p style={{ color: '#64748b', fontSize: '0.8rem', margin: 0, fontStyle: 'italic' }}>
+                    Tiada pesakit dalam senarai menunggu.
+                  </p>
+                ) : (
+                  <div className={styles.waitingChipsRow} style={{ gap: '0.4rem' }}>
+                    {senaraiMenunggu.slice(0, 6).map((g, idx) => (
+                      <span
+                        key={idx}
+                        className={styles.waitingChip}
+                        style={{ fontSize: '0.96rem', padding: '0.26rem 0.72rem' }}
+                      >
+                        {g.no_giliran}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {senaraiFarmasi.length > 0 && (
+                <div
+                  style={{
+                    borderTop: '1px dashed rgba(13, 148, 136, 0.3)',
+                    paddingTop: '0.4rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '0.76rem',
+                      fontWeight: 800,
+                      color: '#059669',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <Pill size={14} /> SEDIA DI FARMASI:
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.35rem', overflow: 'hidden' }}>
+                    {senaraiFarmasi.slice(0, 4).map((f, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          backgroundColor: '#059669',
+                          color: '#ffffff',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          padding: '0.18rem 0.55rem',
+                          borderRadius: '0.35rem'
+                        }}
+                      >
+                        {f.no_giliran}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            TEMPLAT 2: FOKUS MEDIA & EDUKASI (WARM SAND & HIJAU ZAITUN)
+            ======================================================== */}
+        {templateAktif === 'klinik_media' && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1.65fr 1fr',
+              gap: '0.85rem',
+              flex: 1,
+              minHeight: 0,
+              width: '100%'
+            }}
+          >
+            {/* LAJUR KIRI BESAR: VIDEO EDUKASI & PANDUAN RAWATAN */}
+            {renderKotakVideo('320px')}
+
+            {/* LAJUR KANAN: PANGGILAN SEMASA + BILIK + MENUNGGU */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.65rem',
+                height: '100%',
                 minHeight: 0
               }}
             >
-              {bilikDipaparkan.map((b) => {
-                const adaUstaz = Boolean(b.ustazNama);
-                const sedangAktif = Boolean(b.sedangMerawat);
+              {/* KAD PANGGILAN SEMASA (TEMA HIJAU ZAITUN & EMAS HANGAT) */}
+              <section
+                style={{
+                  backgroundColor: '#1b4332',
+                  backgroundImage: CORAK_ISLAMIK_GELAP,
+                  borderRadius: '1rem',
+                  padding: '0.75rem 0.9rem',
+                  color: '#ffffff',
+                  borderTop: '4px solid #d4a373',
+                  boxShadow: '0 8px 20px rgba(27, 67, 50, 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, letterSpacing: '0.08em', color: '#fde68a' }}>
+                  ✦ PANGGILAN RAWATAN SEMASA ✦
+                </span>
 
-                return (
-                  <div
-                    key={b.id}
-                    className={`${styles.roomRow} ${sedangAktif ? styles.roomRowBusy : ''}`}
-                    style={{
-                      padding: '0.38rem 0.8rem',
-                      borderRadius: '0.6rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '0.65rem',
-                      flex: 1,
-                      minHeight: 0
-                    }}
-                  >
-                    {/* LAJUR KIRI: NAMA BILIK & TABIB */}
+                {panggilanTerkini ? (
+                  <>
                     <div
-                      className={styles.roomDoctorCol}
                       style={{
-                        flex: '1 1 auto',
-                        minWidth: 0,
-                        overflow: 'hidden'
+                        fontSize: 'clamp(2.5rem, 4vw, 3.6rem)',
+                        fontWeight: 900,
+                        color: '#facc15',
+                        lineHeight: 1.05,
+                        margin: '0.15rem 0',
+                        animation: sedangPanggilAudio ? 'kelipNomborPanggilan 0.65s infinite ease-in-out' : 'none'
                       }}
                     >
-                      <div 
-                        className={styles.roomLabelTitle}
-                        style={{
-                          fontSize: '0.96rem',
-                          fontWeight: 800,
-                          color: '#0f2942',
-                          letterSpacing: '0.02em',
-                          lineHeight: 1.15
-                        }}
-                      >
-                        {b.namaBilik}
+                      {panggilanTerkini.noGiliran}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '1.1rem',
+                        fontWeight: 700,
+                        maxWidth: '95%',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {panggilanTerkini.namaPesakit}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: '0.4rem',
+                        backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                        border: '1px solid rgba(253, 230, 138, 0.35)',
+                        borderRadius: '0.6rem',
+                        padding: '0.35rem 0.75rem',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#fef08a' }}>
+                        {panggilanTerkini.bilik}
                       </div>
-                      <div 
-                        className={styles.roomDoctorName}
+                      <div
                         style={{
-                          fontSize: '0.76rem',
-                          fontWeight: 600,
-                          color: adaUstaz ? '#0284c7' : '#64748b',
-                          marginTop: '0.1rem',
-                          lineHeight: 1.15,
+                          fontSize: '0.78rem',
+                          color: '#d1fae5',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis'
                         }}
                       >
-                        {adaUstaz ? b.ustazNama : <span className={styles.rehatText}>Rehat / Kosong</span>}
+                        {panggilanTerkini.namaPerawat}
                       </div>
                     </div>
-
-                    {/* LAJUR TENGAH: STATUS RAWATAN SEMASA */}
-                    <div
-                      className={styles.roomStatusCol}
-                      style={{
-                        textAlign: 'right',
-                        flexShrink: 0
-                      }}
-                    >
-                      {sedangAktif ? (
-                        <span 
-                          className={styles.statusSeeing}
-                          style={{
-                            fontSize: '0.82rem',
-                            fontWeight: 700,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          <span className={styles.pulseDot} style={{ width: '7px', height: '7px' }}></span>
-                          {b.statusRawatan === 'dipanggil' ? 'Sedang Dipanggil' : 'Sedang Merawat'} (<strong>{b.noGiliranAktif}</strong>)
-                        </span>
-                      ) : adaUstaz ? (
-                        <span 
-                          className={styles.statusAvailable}
-                          style={{ fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap' }}
-                        >
-                          Sedia Menerima Pesakit
-                        </span>
-                      ) : (
-                        <span 
-                          className={styles.statusClosed}
-                          style={{ fontSize: '0.78rem', fontWeight: 500, fontStyle: 'italic', opacity: 0.85, whiteSpace: 'nowrap' }}
-                        >
-                          Bilik Tidak Beroperasi
-                        </span>
-                      )}
-                    </div>
-
-                    {/* LAJUR KANAN: LENCANA STATUS */}
-                    <div className={styles.roomWaitCol} style={{ flexShrink: 0 }}>
-                      {sedangAktif ? (
-                        <div className={styles.badgeBusyPill} style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.2rem 0.6rem' }}>
-                          Aktif
-                        </div>
-                      ) : adaUstaz ? (
-                        <div className={styles.badgeAvailablePill} style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.2rem 0.6rem' }}>
-                          Tersedia
-                        </div>
-                      ) : (
-                        <div className={styles.badgeClosedPill} style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem' }}>
-                          Tutup
-                        </div>
-                      )}
-                    </div>
+                  </>
+                ) : (
+                  <div style={{ padding: '1rem 0', color: '#d1fae5', fontSize: '0.88rem' }}>
+                    Ruang menunggu tenang • Nantikan panggilan giliran anda
                   </div>
-                );
-              })}
-            </div>
-          </section>
+                )}
+              </section>
 
-          {/* ========================================================
-              BARIS 2 KIRI: PEMAIN VIDEO (TAG TERSEMBUNYI HINGGA DIARAHKAN KURSOR)
-              ======================================================== */}
-          <div
-            style={{
-              height: '100%',
-              minHeight: '185px',
-              backgroundColor: '#022432',
-              borderRadius: '1.1rem',
-              overflow: 'hidden',
-              border: '2px solid rgba(255, 255, 255, 0.15)',
-              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            {videoSemasa ? (
-              isVideoMp4 ? (
-                <video
-                  ref={videoPlayerRef}
-                  key={videoSemasa.id}
-                  src={videoSemasa.url_video}
-                  autoPlay
-                  muted={!audioDibenarkan || videoSemasa.kelantangan_audio === 0}
-                  playsInline
-                  preload="auto"
-                  loop={videoSemasa.loop_tunggal || senaraiVideo.length === 1}
-                  onLoadedData={() => selarasAudioVideo(audioDibenarkanRef.current)}
-                  onPlay={() => {
-                    setVideoDijedaManual(false);
-                    videoDijedaManualRef.current = false;
-                  }}
-                  onPause={() => {
-                    if (!sedangPanggilRef.current) {
-                      setVideoDijedaManual(true);
-                      videoDijedaManualRef.current = true;
-                    }
-                  }}
-                  onEnded={tanganiVideoTamat}
-                  onError={() => {
-                    setTimeout(tanganiVideoTamat, 2500);
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                    pointerEvents: 'auto'
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: '100%',
-                  height: '100%',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  backgroundColor: '#022432'
-                }}>
-                  <iframe
-                    ref={iframePlayerRef}
-                    key={videoSemasa.id}
-                    src={janaYouTubeEmbedUrl(
-                      videoSemasa.url_video,
-                      videoSemasa.loop_tunggal || senaraiVideo.length === 1
-                    )}
-                    title={videoSemasa.tajuk}
-                    onLoad={() => {
-                      setTimeout(() => {
-                        if (iframePlayerRef.current?.contentWindow) {
-                          iframePlayerRef.current.contentWindow.postMessage(
-                            JSON.stringify({ event: 'listening', id: 1 }),
-                            '*'
-                          );
-                        }
-                        selarasAudioVideo(audioDibenarkanRef.current);
-                      }, 1200);
-                    }}
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      width: '106%',
-                      height: '152%',
-                      transform: 'translate(-50%, -50%)',
-                      border: 'none',
-                      pointerEvents: 'auto'
-                    }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                    allowFullScreen
-                  />
-                </div>
-              )
-            ) : (
-              <div style={{
-                color: '#64748b',
-                fontSize: '0.88rem',
-                textAlign: 'center',
-                padding: '1.25rem',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.4rem'
-              }}>
-                <Film size={30} color="#0d9488" opacity={0.6} />
-                <span style={{ fontWeight: 600 }}>Tiada video siaran aktif.</span>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tetapkan di Pusat Pentadbir (/admin)</span>
-              </div>
-            )}
-
-            {/* ZON HOVER KHUSUS DI BAWAH VIDEO: MUNCUL HANYA APABILA KURSOR DIARAHKAN PADANYA */}
-            {videoSemasa && (
-              <div
-                className={`video-bottom-trigger ${barHovered ? 'is-hovered' : ''}`}
-                onMouseEnter={() => setBarHovered(true)}
-                onMouseLeave={() => {
-                  setBarHovered(false);
-                  if (document.activeElement instanceof HTMLElement) {
-                    document.activeElement.blur();
-                  }
-                }}
+              {/* STATUS BILIK RINGKAS */}
+              <section
                 style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '52px',
-                  zIndex: 35,
+                  backgroundColor: '#fffdf9',
+                  border: '1px solid rgba(180, 134, 65, 0.3)',
+                  borderRadius: '0.9rem',
+                  padding: '0.6rem 0.8rem',
+                  flex: 1,
                   display: 'flex',
-                  alignItems: 'flex-end',
-                  padding: '0 10px 10px 10px',
-                  boxSizing: 'border-box'
+                  flexDirection: 'column',
+                  minHeight: 0,
+                  overflow: 'hidden'
                 }}
               >
                 <div
-                  className="video-bottom-bar"
                   style={{
-                    width: '100%',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    color: '#1b4332',
+                    marginBottom: '0.35rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <Stethoscope size={15} color="#2d6a4f" /> BILIK RAWATAN AKTIF
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1, justifyContent: 'space-between' }}>
+                  {bilikDipaparkan.map((b) => (
+                    <div
+                      key={b.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.3rem 0.55rem',
+                        borderRadius: '0.45rem',
+                        backgroundColor: b.sedangMerawat ? '#ecfdf5' : '#f8f5ee',
+                        border: b.sedangMerawat ? '1px solid #6ee7b7' : '1px solid #e7e0d0'
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1b4332' }}>{b.namaBilik}</div>
+                        <div
+                          style={{
+                            fontSize: '0.7rem',
+                            color: '#6b7280',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {b.ustazNama || 'Rehat / Kosong'}
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          padding: '0.18rem 0.5rem',
+                          borderRadius: '0.35rem',
+                          backgroundColor: b.sedangMerawat ? '#059669' : b.ustazNama ? '#d8f3dc' : '#e5e7eb',
+                          color: b.sedangMerawat ? '#ffffff' : b.ustazNama ? '#1b4332' : '#6b7280',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {b.sedangMerawat ? b.noGiliranAktif : b.ustazNama ? 'Tersedia' : 'Tutup'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* GILIRAN MENUNGGU */}
+              <section
+                style={{
+                  backgroundColor: '#fffdf9',
+                  border: '1px solid rgba(180, 134, 65, 0.3)',
+                  borderRadius: '0.9rem',
+                  padding: '0.55rem 0.8rem',
+                  flexShrink: 0
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    color: '#785a28',
+                    marginBottom: '0.3rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <Users size={14} /> GILIRAN SETERUSNYA
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  {senaraiMenunggu.length === 0 ? (
+                    <span style={{ fontSize: '0.76rem', color: '#9ca3af', fontStyle: 'italic' }}>Tiada menunggu</span>
+                  ) : (
+                    senaraiMenunggu.slice(0, 5).map((g, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          backgroundColor: '#2d6a4f',
+                          color: '#ffffff',
+                          fontSize: '0.86rem',
+                          fontWeight: 800,
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '0.4rem'
+                        }}
+                      >
+                        {g.no_giliran}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            TEMPLAT 3: MOD WAKTU PUNCAK & FARMASI (EMERALD SERENITY)
+            ======================================================== */}
+        {templateAktif === 'klinik_puncak' && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.55fr',
+              gap: '0.85rem',
+              flex: 1,
+              minHeight: 0,
+              width: '100%'
+            }}
+          >
+            {/* LAJUR KIRI: PANGGILAN MEGA + PANGGILAN KAUNTER FARMASI */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%', minHeight: 0 }}>
+              {/* KAD PANGGILAN MEGA */}
+              <section
+                style={{
+                  flex: 1.35,
+                  backgroundColor: '#06372e',
+                  backgroundImage: CORAK_ISLAMIK_GELAP,
+                  border: '2px solid rgba(52, 211, 153, 0.35)',
+                  borderTop: '5px solid #facc15',
+                  borderRadius: '1.1rem',
+                  padding: '0.9rem 1.1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  textAlign: 'center',
+                  boxShadow: '0 10px 25px rgba(0, 0, 0, 0.35)'
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, letterSpacing: '0.1em', color: '#6ee7b7' }}>
+                    ✦ SEDANG DIPANGGIL ✦
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#a7f3d0', marginTop: '0.1rem' }}>
+                    SILA BERSIAP SEDIA KE BILIK RAWATAN
+                  </div>
+                </div>
+
+                {panggilanTerkini ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: 'clamp(3.6rem, 5.8vw, 5.2rem)',
+                        fontWeight: 900,
+                        color: '#facc15',
+                        lineHeight: 1,
+                        letterSpacing: '0.02em',
+                        animation: sedangPanggilAudio ? 'kelipNomborPanggilan 0.65s infinite ease-in-out' : 'none'
+                      }}
+                    >
+                      {panggilanTerkini.noGiliran}
+                      {panggilanTerkini.perluKerusiRoda && <span style={{ marginLeft: '0.4rem' }}>♿</span>}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 'clamp(1.25rem, 2vw, 1.75rem)',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        maxWidth: '96%',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {panggilanTerkini.namaPesakit}
+                    </div>
+
+                    <div
+                      style={{
+                        width: '100%',
+                        backgroundColor: 'rgba(4, 35, 29, 0.85)',
+                        border: '1.5px solid rgba(250, 204, 21, 0.45)',
+                        borderRadius: '0.85rem',
+                        padding: '0.65rem 1rem',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <div style={{ fontSize: '0.85rem', color: '#a7f3d0', fontWeight: 700 }}>Sila Masuk Ke</div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.6rem',
+                          margin: '0.15rem 0'
+                        }}
+                      >
+                        <span style={{ fontSize: 'clamp(2rem, 3.2vw, 2.7rem)', fontWeight: 900, color: '#fef08a' }}>
+                          {panggilanTerkini.bilik}
+                        </span>
+                        <ArrowRight size={26} color="#facc15" strokeWidth={3.5} />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.95rem',
+                          fontWeight: 700,
+                          color: '#d1fae5',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        Bersama <strong style={{ color: '#facc15' }}>{panggilanTerkini.namaPerawat}</strong>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: '#a7f3d0', fontSize: '1rem', fontWeight: 600 }}>
+                    Sila nantikan nombor giliran anda diumumkan
+                  </div>
+                )}
+              </section>
+
+              {/* PANEL KAUNTER FARMASI (SEDIA AMBIL PENAWAR) */}
+              <section
+                style={{
+                  flex: 0.75,
+                  backgroundColor: '#06372e',
+                  border: '1.5px solid rgba(251, 191, 36, 0.4)',
+                  borderRadius: '1rem',
+                  padding: '0.75rem 1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    gap: '0.5rem',
-                    opacity: barHovered ? 1 : 0,
-                    visibility: barHovered ? 'visible' : 'hidden',
-                    transform: barHovered ? 'translateY(0)' : 'translateY(6px)',
-                    pointerEvents: barHovered ? 'auto' : 'none',
-                    transition: 'opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease'
+                    borderBottom: '1px solid rgba(52, 211, 153, 0.2)',
+                    paddingBottom: '0.4rem'
                   }}
                 >
-                  {/* TAG TAJUK VIDEO (KIRI BAWAH) */}
-                  <div
+                  <span
                     style={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.88)',
-                      backdropFilter: 'blur(8px)',
-                      WebkitBackdropFilter: 'blur(8px)',
-                      padding: '0.35rem 0.75rem',
-                      borderRadius: '0.5rem',
-                      fontSize: '0.74rem',
-                      fontWeight: 700,
-                      color: '#ffffff',
-                      maxWidth: '65%',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)'
-                    }}
-                  >
-                    <Film size={13} color="#38bdf8" />
-                    <span>{videoSemasa.tajuk}</span>
-                    <span style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 500 }}>
-                      • {videoSemasa.loop_tunggal ? 'Loop' : 'Rawak'} ({videoSemasa.kelantangan_audio}%)
-                    </span>
-                  </div>
-
-                  {/* BUTANG MAIN / JEDA & AUDIO (KANAN BAWAH) */}
-                  <div
-                    style={{
+                      fontSize: '0.9rem',
+                      fontWeight: 800,
+                      color: '#fbbf24',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '0.4rem'
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={togglePlayPauseVideo}
-                      className="tv-remote-focus"
-                      title={videoDijedaManual ? 'Mainkan Video (Play)' : 'Jedakan Video (Pause)'}
-                      style={{
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        color: '#ffffff',
-                        border: '1px solid rgba(255, 255, 255, 0.25)',
-                        borderRadius: '0.5rem',
-                        padding: '0.35rem 0.7rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
-                      }}
-                    >
-                      {videoDijedaManual ? (
-                        <>
-                          <Play size={14} color="#34d399" /> Main
-                        </>
-                      ) : (
-                        <>
-                          <Pause size={14} color="#fbbf24" /> Jeda
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!audioDibenarkanRef.current) {
-                          aktifkanSkrinPenuhDanAudio();
-                        } else {
-                          selarasAudioVideo(true);
-                        }
-                      }}
-                      className="tv-remote-focus"
-                      title="Pulihkan Audio Video"
-                      style={{
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        color: '#38bdf8',
-                        border: '1px solid rgba(255, 255, 255, 0.25)',
-                        borderRadius: '0.5rem',
-                        padding: '0.35rem 0.55rem',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.35)'
-                      }}
-                    >
-                      {audioDibenarkan && (videoSemasa.kelantangan_audio ?? 20) > 0 ? (
-                        <Volume2 size={15} />
-                      ) : (
-                        <VolumeX size={15} color="#f87171" />
-                      )}
-                    </button>
-                  </div>
+                    <Pill size={18} /> KAUNTER FARMASI (SEDIA AMBIL PENAWAR)
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#a7f3d0', fontWeight: 700 }}>
+                    {senaraiFarmasi.length} Pesakit
+                  </span>
                 </div>
-              </div>
-            )}
-          </div>
 
-          {/* BARIS 2 KANAN: GILIRAN MENUNGGU SETERUSNYA */}
-          <div className={styles.waitingBoxCard} style={{ padding: '0.65rem 0.9rem' }}>
-            <div className={styles.waitingHeaderRow} style={{ fontSize: '0.88rem', marginBottom: '0.45rem' }}>
-              <Users size={17} />
-              <span>GILIRAN MENUNGGU SETERUSNYA</span>
+                {senaraiFarmasi.length === 0 ? (
+                  <p style={{ color: '#6ee7b7', fontSize: '0.84rem', margin: 'auto 0', fontStyle: 'italic' }}>
+                    Tiada bungkusan penawar menunggu kutipan buat masa ini.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.45rem' }}>
+                    {senaraiFarmasi.map((f, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          backgroundColor: '#f59e0b',
+                          color: '#04231d',
+                          padding: '0.35rem 0.75rem',
+                          borderRadius: '0.5rem',
+                          fontWeight: 900,
+                          fontSize: '1.05rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem'
+                        }}
+                      >
+                        <span>{f.no_giliran}</span>
+                        {(f.pesakit as any)?.nama && (
+                          <span style={{ fontSize: '0.76rem', fontWeight: 700, opacity: 0.9 }}>
+                            • {(f.pesakit as any).nama.split(' ')[0]}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
 
-            {senaraiMenunggu.length === 0 ? (
-              <p style={{ color: '#64748b', fontSize: '0.82rem', margin: 0, fontStyle: 'italic' }}>
-                Tiada pesakit dalam senarai menunggu.
-              </p>
-            ) : (
-              <div className={styles.waitingChipsRow} style={{ gap: '0.45rem' }}>
-                {senaraiMenunggu.map((g, idx) => (
+            {/* LAJUR KANAN: SEMUA BILIK RAWATAN SERENTAK + 12 GILIRAN MENUNGGU */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%', minHeight: 0 }}>
+              {/* GRID SEMUA BILIK RAWATAN */}
+              <section
+                style={{
+                  flex: 1.35,
+                  backgroundColor: '#06372e',
+                  border: '1.5px solid rgba(52, 211, 153, 0.3)',
+                  borderRadius: '1.1rem',
+                  padding: '0.75rem 1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: 0,
+                  overflow: 'hidden'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '0.5rem'
+                  }}
+                >
                   <span
-                    key={idx}
-                    className={styles.waitingChip}
-                    style={{ fontSize: '1rem', padding: '0.3rem 0.8rem' }}
+                    style={{
+                      fontSize: '0.95rem',
+                      fontWeight: 800,
+                      color: '#6ee7b7',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem'
+                    }}
                   >
-                    {g.no_giliran}
+                    <Stethoscope size={19} /> STATUS SEMUA BILIK RAWATAN
                   </span>
-                ))}
-              </div>
-            )}
+                  <span style={{ fontSize: '0.76rem', color: '#a7f3d0', fontWeight: 600 }}>
+                    Paparan Langsung Semua Bilik
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '0.55rem',
+                    flex: 1,
+                    minHeight: 0
+                  }}
+                >
+                  {semuaBilikStatus.map((b) => {
+                    const adaUstaz = Boolean(b.ustazNama);
+                    const sedangAktif = Boolean(b.sedangMerawat);
+
+                    return (
+                      <div
+                        key={b.id}
+                        style={{
+                          backgroundColor: sedangAktif
+                            ? 'rgba(250, 204, 21, 0.14)'
+                            : adaUstaz
+                            ? 'rgba(16, 185, 129, 0.12)'
+                            : 'rgba(4, 35, 29, 0.65)',
+                          border: sedangAktif
+                            ? '1.5px solid #facc15'
+                            : adaUstaz
+                            ? '1px solid rgba(52, 211, 153, 0.35)'
+                            : '1px solid rgba(148, 163, 184, 0.2)',
+                          borderRadius: '0.75rem',
+                          padding: '0.55rem 0.8rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          minWidth: 0
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '1.05rem', fontWeight: 900, color: '#ffffff' }}>{b.namaBilik}</span>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '0.4rem',
+                              backgroundColor: sedangAktif ? '#facc15' : adaUstaz ? '#10b981' : '#334155',
+                              color: sedangAktif ? '#04231d' : '#ffffff'
+                            }}
+                          >
+                            {sedangAktif ? `Aktif • ${b.noGiliranAktif}` : adaUstaz ? 'Tersedia' : 'Tutup'}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            color: adaUstaz ? '#a7f3d0' : '#64748b',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            marginTop: '0.2rem'
+                          }}
+                        >
+                          {adaUstaz ? b.ustazNama : 'Tiada Tabib Bertugas'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* PANEL 12 GILIRAN MENUNGGU SETERUSNYA */}
+              <section
+                style={{
+                  flex: 0.75,
+                  backgroundColor: '#06372e',
+                  border: '1.5px solid rgba(52, 211, 153, 0.3)',
+                  borderRadius: '1rem',
+                  padding: '0.75rem 1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderBottom: '1px solid rgba(52, 211, 153, 0.2)',
+                    paddingBottom: '0.4rem'
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '0.9rem',
+                      fontWeight: 800,
+                      color: '#6ee7b7',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem'
+                    }}
+                  >
+                    <Users size={18} /> SENARAI GILIRAN MENUNGGU ({senaraiMenunggu.length})
+                  </span>
+                  <span style={{ fontSize: '0.74rem', color: '#a7f3d0' }}>Sila bersedia apabila nombor hampir tiba</span>
+                </div>
+
+                {senaraiMenunggu.length === 0 ? (
+                  <p style={{ color: '#6ee7b7', fontSize: '0.84rem', margin: 'auto 0', fontStyle: 'italic' }}>
+                    Tiada pesakit dalam barisan menunggu.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.45rem' }}>
+                    {senaraiMenunggu.map((g, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          backgroundColor: idx === 0 ? '#34d399' : '#0f766e',
+                          color: idx === 0 ? '#04231d' : '#ffffff',
+                          border: idx === 0 ? '1.5px solid #fef08a' : '1px solid rgba(52, 211, 153, 0.35)',
+                          fontSize: '1.08rem',
+                          fontWeight: 900,
+                          padding: '0.32rem 0.85rem',
+                          borderRadius: '0.5rem'
+                        }}
+                      >
+                        {g.no_giliran}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      <footer className={styles.tickerFooter}>
+      {/* ========================================================
+          TICKER BAWAH: AYAT SYIFA' & MAKLUMAN KLINIK
+          ======================================================== */}
+      <footer
+        className={styles.tickerFooter}
+        style={{
+          backgroundColor: isEmeraldDark ? '#021713' : isSand ? '#1b4332' : undefined,
+          borderTop: isEmeraldDark ? '1.5px solid rgba(52, 211, 153, 0.35)' : undefined
+        }}
+      >
         <div
           className={styles.tickerTrack}
           style={{

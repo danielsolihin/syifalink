@@ -159,7 +159,7 @@ export default function PapanPemukaAdmin() {
   const [formKeteranganReaksi, setFormKeteranganReaksi] = useState('');
   const [selectedReaksi, setSelectedReaksi] = useState<string[]>([]);
 
-  // Data Siaran Video TV
+  // Data Siaran Video TV & Pilihan Templat Skrin TV
   const [senaraiVideo, setSenaraiVideo] = useState<VideoTV[]>([]);
   const [bukaModalVideo, setBukaModalVideo] = useState(false);
   const [videoDiedit, setVideoDiedit] = useState<VideoTV | null>(null);
@@ -169,6 +169,7 @@ export default function PapanPemukaAdmin() {
   const [formLoopVideo, setFormLoopVideo] = useState(false);
   const [formKelantangan, setFormKelantangan] = useState(20);
   const [selectedVideo, setSelectedVideo] = useState<string[]>([]);
+  const [templateTVAktif, setTemplateTVAktif] = useState<'klinik_klasik' | 'klinik_media' | 'klinik_puncak'>('klinik_klasik');
 
   // Data Siaran Ticker TV
   const [senaraiTicker, setSenaraiTicker] = useState<ItemTickerAdmin[]>([]);
@@ -439,7 +440,54 @@ export default function PapanPemukaAdmin() {
       .select('*')
       .order('turutan', { ascending: true })
       .order('created_at', { ascending: false });
-    if (data) setSenaraiTicker(data);
+    if (data) {
+      const rekodTemplate = data.find((item: any) => item.rujukan === '__SYSTEM_TEMPLATE_TV__');
+      if (rekodTemplate?.teks_maksud) {
+        const kod = rekodTemplate.teks_maksud;
+        if (kod === 'klinik_klasik' || kod === 'klinik_media' || kod === 'klinik_puncak') {
+          setTemplateTVAktif(kod);
+        }
+      }
+      setSenaraiTicker(data.filter((item: any) => item.rujukan !== '__SYSTEM_TEMPLATE_TV__'));
+    }
+  };
+
+  const tukarTemplateTV = async (kodTemplate: 'klinik_klasik' | 'klinik_media' | 'klinik_puncak') => {
+    setMemproses(true);
+    try {
+      setTemplateTVAktif(kodTemplate);
+      const { data: sediaAda } = await supabase
+        .from('pengumuman_ticker')
+        .select('id')
+        .eq('rujukan', '__SYSTEM_TEMPLATE_TV__')
+        .limit(1)
+        .maybeSingle();
+
+      if (sediaAda?.id) {
+        const { error } = await supabase
+          .from('pengumuman_ticker')
+          .update({
+            teks_maksud: kodTemplate,
+            kategori: 'makluman',
+            status_aktif: false
+          })
+          .eq('id', sediaAda.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('pengumuman_ticker').insert({
+          teks_maksud: kodTemplate,
+          rujukan: '__SYSTEM_TEMPLATE_TV__',
+          kategori: 'makluman',
+          turutan: 999,
+          status_aktif: false
+        });
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      alert('Ralat menukar templat TV: ' + err.message);
+    } finally {
+      setMemproses(false);
+    }
   };
 
   const muatDataAdmin = async () => {
@@ -2256,134 +2304,206 @@ export default function PapanPemukaAdmin() {
 
         {/* ===================== TAB 7: SIARAN VIDEO TV ===================== */}
         {tabAktif === 'video' && isSuper && (
-          <div className={styles.cardPanel} style={{ width: '100%' }}>
-            <div className={styles.tableHeaderActionRow}>
-              <div>
-                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Siaran Video Skrin TV</h2>
+          <div style={{ width: '100%' }}>
+            {/* PILIHAN TEMPLAT SKRIN TV KLINIK (MASA NYATA) */}
+            <div className={styles.cardPanel} style={{ width: '100%', marginBottom: '1.25rem' }}>
+              <div style={{ marginBottom: '0.85rem' }}>
+                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>
+                  Pilihan Templat Paparan Skrin TV Klinik (/tv)
+                </h2>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Tetapkan pautan YouTube atau fail MP4 untuk dimainkan di kotak dewan menunggu
+                  Klik pada mana-mana reka bentuk di bawah — paparan pada Android TV &amp; Smart TV akan bertukar secara automatik
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {selectedVideo.length > 0 && (
-                  <button type="button" onClick={padamVideoPukal} disabled={memproses} className={styles.btnBulkDelete}>
-                    <Trash2 size={13} /> Padam Terpilih ({selectedVideo.length})
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVideoDiedit(null);
-                    setFormTajukVideo('');
-                    setFormUrlVideo('');
-                    setFormJenisVideo('youtube');
-                    setFormLoopVideo(false);
-                    setFormKelantangan(20);
-                    setBukaModalVideo(true);
-                  }}
-                  className={styles.btnAction}
-                  style={{ fontWeight: 500 }}
-                >
-                  <PlusCircle size={14} /> Tambah Video TV
-                </button>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.85rem' }}>
+                {[
+                  {
+                    kod: 'klinik_klasik' as const,
+                    tajuk: 'Templat 1: Klasik Klinik',
+                    warna: '#0d9488',
+                    huraian: 'Susun atur seimbang (Panggilan + 4 Bilik + Video + Menunggu) dengan tema Teal Klinik & corak Islamik.'
+                  },
+                  {
+                    kod: 'klinik_media' as const,
+                    tajuk: 'Templat 2: Fokus Media & Edukasi',
+                    warna: '#d97706',
+                    huraian: 'Video besar (65% skrin kiri) dengan tema Warm Sand santai & hijau zaitun — sesuai untuk tayangan tazkirah.'
+                  },
+                  {
+                    kod: 'klinik_puncak' as const,
+                    tajuk: 'Templat 3: Mod Waktu Puncak & Farmasi',
+                    warna: '#10b981',
+                    huraian: 'Tanpa video; nombor mega, semua bilik serentak & panggilan Kaunter Farmasi (tema Emerald gelap kontras tinggi).'
+                  }
+                ].map((tpl) => {
+                  const aktif = templateTVAktif === tpl.kod;
+                  return (
+                    <div
+                      key={tpl.kod}
+                      onClick={() => tukarTemplateTV(tpl.kod)}
+                      style={{
+                        backgroundColor: aktif ? '#1e293b' : '#0f172a',
+                        border: aktif ? `2px solid ${tpl.warna}` : '1px solid #334155',
+                        borderRadius: '0.75rem',
+                        padding: '0.95rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#f8fafc' }}>{tpl.tajuk}</strong>
+                        {aktif && (
+                          <span
+                            style={{
+                              backgroundColor: tpl.warna,
+                              color: '#04231d',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '0.3rem'
+                            }}
+                          >
+                            AKTIF DI TV
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8', lineHeight: 1.4 }}>{tpl.huraian}</p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div className={styles.tableWrapper}>
-              <table className={styles.table} style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: '40px', textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        className={styles.tableCheckbox}
-                        checked={senaraiVideo.length > 0 && selectedVideo.length === senaraiVideo.length}
-                        onChange={toggleSelectAllVideo}
-                      />
-                    </th>
-                    <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
-                    <th style={{ fontWeight: 500 }}>Tajuk Video</th>
-                    <th style={{ fontWeight: 500 }}>Jenis Media</th>
-                    <th style={{ fontWeight: 500 }}>Pautan / URL</th>
-                    <th style={{ fontWeight: 500 }}>Mod Mainan</th>
-                    <th style={{ fontWeight: 500 }}>Kelantangan Audio</th>
-                    <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {senaraiVideo.length === 0 ? (
+            <div className={styles.cardPanel} style={{ width: '100%' }}>
+              <div className={styles.tableHeaderActionRow}>
+                <div>
+                  <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Pengurusan Siaran Video Skrin TV</h2>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                    Tetapkan pautan YouTube atau fail MP4 untuk dimainkan di kotak dewan menunggu
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {selectedVideo.length > 0 && (
+                    <button type="button" onClick={padamVideoPukal} disabled={memproses} className={styles.btnBulkDelete}>
+                      <Trash2 size={13} /> Padam Terpilih ({selectedVideo.length})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVideoDiedit(null);
+                      setFormTajukVideo('');
+                      setFormUrlVideo('');
+                      setFormJenisVideo('youtube');
+                      setFormLoopVideo(false);
+                      setFormKelantangan(20);
+                      setBukaModalVideo(true);
+                    }}
+                    className={styles.btnAction}
+                    style={{ fontWeight: 500 }}
+                  >
+                    <PlusCircle size={14} /> Tambah Video TV
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.tableWrapper}>
+                <table className={styles.table} style={{ width: '100%' }}>
+                  <thead>
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                        Belum ada video siaran TV didaftarkan.
-                      </td>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          className={styles.tableCheckbox}
+                          checked={senaraiVideo.length > 0 && selectedVideo.length === senaraiVideo.length}
+                          onChange={toggleSelectAllVideo}
+                        />
+                      </th>
+                      <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
+                      <th style={{ fontWeight: 500 }}>Tajuk Video</th>
+                      <th style={{ fontWeight: 500 }}>Jenis Media</th>
+                      <th style={{ fontWeight: 500 }}>Pautan / URL</th>
+                      <th style={{ fontWeight: 500 }}>Mod Mainan</th>
+                      <th style={{ fontWeight: 500 }}>Kelantangan Audio</th>
+                      <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
                     </tr>
-                  ) : (
-                    senaraiVideo.map((v, idx) => (
-                      <tr key={v.id}>
-                        <td style={{ textAlign: 'center' }}>
-                          <input
-                            type="checkbox"
-                            className={styles.tableCheckbox}
-                            checked={selectedVideo.includes(v.id)}
-                            onChange={() => toggleSelectVideo(v.id)}
-                          />
-                        </td>
-                        <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                        <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{v.tajuk}</td>
-                        <td>
-                          <span className={styles.badgeMethod} style={{ backgroundColor: v.jenis === 'youtube' ? '#dc2626' : '#0284c7', color: '#fff' }}>
-                            {v.jenis.toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#38bdf8', fontSize: '0.8rem' }}>
-                          {v.url_video}
-                        </td>
-                        <td>
-                          {v.loop_tunggal ? (
-                            <span style={{ color: '#fbbf24', fontWeight: 500 }}>🔄 Berulang (Loop)</span>
-                          ) : (
-                            <span style={{ color: '#94a3b8' }}>🔀 Main Rawak</span>
-                          )}
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 500, color: v.kelantangan_audio === 0 ? '#64748b' : v.kelantangan_audio <= 30 ? '#34d399' : '#f59e0b' }}>
-                            {v.kelantangan_audio === 0 ? 'Bisu (0%)' : `${v.kelantangan_audio}%`}
-                          </span>
-                        </td>
-                        <td>
-                          <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setVideoDiedit(v);
-                                setFormTajukVideo(v.tajuk);
-                                setFormUrlVideo(v.url_video);
-                                setFormJenisVideo(v.jenis);
-                                setFormLoopVideo(v.loop_tunggal);
-                                setFormKelantangan(v.kelantangan_audio);
-                                setBukaModalVideo(true);
-                              }}
-                              className={styles.btnEdit}
-                              style={{ padding: '0.35rem 0.65rem' }}
-                            >
-                              <Edit size={12} /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              disabled={memproses}
-                              onClick={() => tanganiPadamSatuVideo(v.id)}
-                              className={styles.btnBulkDelete}
-                              style={{ padding: '0.35rem 0.65rem' }}
-                            >
-                              <Trash2 size={12} /> Padam
-                            </button>
-                          </div>
+                  </thead>
+                  <tbody>
+                    {senaraiVideo.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                          Belum ada video siaran TV didaftarkan.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      senaraiVideo.map((v, idx) => (
+                        <tr key={v.id}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              className={styles.tableCheckbox}
+                              checked={selectedVideo.includes(v.id)}
+                              onChange={() => toggleSelectVideo(v.id)}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                          <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{v.tajuk}</td>
+                          <td>
+                            <span className={styles.badgeMethod} style={{ backgroundColor: v.jenis === 'youtube' ? '#dc2626' : '#0284c7', color: '#fff' }}>
+                              {v.jenis.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#38bdf8', fontSize: '0.8rem' }}>
+                            {v.url_video}
+                          </td>
+                          <td>
+                            {v.loop_tunggal ? (
+                              <span style={{ color: '#fbbf24', fontWeight: 500 }}>🔄 Berulang (Loop)</span>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>🔀 Main Rawak</span>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 500, color: v.kelantangan_audio === 0 ? '#64748b' : v.kelantangan_audio <= 30 ? '#34d399' : '#f59e0b' }}>
+                              {v.kelantangan_audio === 0 ? 'Bisu (0%)' : `${v.kelantangan_audio}%`}
+                            </span>
+                          </td>
+                          <td>
+                            <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setVideoDiedit(v);
+                                  setFormTajukVideo(v.tajuk);
+                                  setFormUrlVideo(v.url_video);
+                                  setFormJenisVideo(v.jenis);
+                                  setFormLoopVideo(v.loop_tunggal);
+                                  setFormKelantangan(v.kelantangan_audio);
+                                  setBukaModalVideo(true);
+                                }}
+                                className={styles.btnEdit}
+                                style={{ padding: '0.35rem 0.65rem' }}
+                              >
+                                <Edit size={12} /> Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={memproses}
+                                onClick={() => tanganiPadamSatuVideo(v.id)}
+                                className={styles.btnBulkDelete}
+                                style={{ padding: '0.35rem 0.65rem' }}
+                              >
+                                <Trash2 size={12} /> Padam
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
