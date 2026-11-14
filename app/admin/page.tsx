@@ -57,6 +57,10 @@ interface Perawat {
   kelayakan?: string;
   bidang_khusus?: string;
   tarikh_mula?: string;
+  lesen_kkm?: string;
+  status_lesen?: string;
+  tarikh_tamat_lesen?: string;
+  no_kad_perawat?: string;
   status_aktif: boolean;
 }
 
@@ -1041,35 +1045,52 @@ export default function PapanPemukaAdmin() {
 
   const simpanPerawat = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!perawatDiedit) return;
     setMemproses(true);
 
+    const namaDiformat = formatNamaTitleCase(perawatDiedit.nama);
+
     try {
-      if (perawatDiedit && perawatDiedit.id) {
-        await supabase.from('perawat').update({
-          nama: perawatDiedit.nama,
+      if (perawatDiedit.id) {
+        const { error } = await supabase.from('perawat').update({
+          nama: namaDiformat,
           no_bilik: '-',
           no_ic: perawatDiedit.no_ic,
           no_telefon: perawatDiedit.no_telefon,
           kelayakan: perawatDiedit.kelayakan,
           bidang_khusus: perawatDiedit.bidang_khusus,
+          lesen_kkm: perawatDiedit.lesen_kkm?.trim() || null,
+          status_lesen: perawatDiedit.status_lesen || 'Belum Didaftar',
+          tarikh_tamat_lesen: perawatDiedit.tarikh_tamat_lesen || null,
+          no_kad_perawat: perawatDiedit.no_kad_perawat?.trim() || null,
           status_aktif: perawatDiedit.status_aktif
         }).eq('id', perawatDiedit.id);
+
+        if (error) throw error;
         alert('Maklumat perawat dikemaskini!');
-      } else if (perawatDiedit) {
-        await supabase.from('perawat').insert({
-          nama: perawatDiedit.nama,
+      } else {
+        const { error } = await supabase.from('perawat').insert({
+          nama: namaDiformat,
           no_bilik: '-',
           no_ic: perawatDiedit.no_ic,
           no_telefon: perawatDiedit.no_telefon,
           kelayakan: perawatDiedit.kelayakan,
           bidang_khusus: perawatDiedit.bidang_khusus,
+          lesen_kkm: perawatDiedit.lesen_kkm?.trim() || null,
+          status_lesen: perawatDiedit.status_lesen || 'Belum Didaftar',
+          tarikh_tamat_lesen: perawatDiedit.tarikh_tamat_lesen || null,
+          no_kad_perawat: perawatDiedit.no_kad_perawat?.trim() || null,
           status_aktif: true
         });
+
+        if (error) throw error;
         alert('Perawat baharu didaftarkan!');
       }
       setPerawatDiedit(null);
       setBukaModalPerawat(false);
       muatDataPerawat();
+    } catch (err: any) {
+      alert('Ralat menyimpan profil perawat: ' + err.message);
     } finally {
       setMemproses(false);
     }
@@ -1959,6 +1980,10 @@ export default function PapanPemukaAdmin() {
                       no_telefon: '',
                       kelayakan: '',
                       bidang_khusus: '',
+                      lesen_kkm: '',
+                      status_lesen: 'Aktif',
+                      tarikh_tamat_lesen: '',
+                      no_kad_perawat: '',
                       status_aktif: true
                     });
                     setBukaModalPerawat(true);
@@ -1981,33 +2006,73 @@ export default function PapanPemukaAdmin() {
                     <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
                     <th style={{ fontWeight: 500 }}>Nama Perawat</th>
                     <th style={{ fontWeight: 500 }}>No. Telefon</th>
-                    <th style={{ fontWeight: 500 }}>Kelayakan / Tauliah</th>
-                    <th style={{ fontWeight: 500 }}>Bidang Tumpuan Ruqyah</th>
-                    <th style={{ fontWeight: 500 }}>Status</th>
+                    <th style={{ fontWeight: 500 }}>Lesen KKM</th>
+                    <th style={{ fontWeight: 500 }}>Status Lesen</th>
+                    <th style={{ fontWeight: 500 }}>Tarikh Tamat</th>
+                    <th style={{ fontWeight: 500 }}>Kad Perawat</th>
                     <th style={{ textAlign: 'center', fontWeight: 500 }}>Tindakan</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {senaraiPerawat.map((u, idx) => (
-                    <tr key={u.id}>
-                      <td style={{ textAlign: 'center' }}>
-                        <input type="checkbox" className={styles.tableCheckbox} checked={selectedPerawat.includes(u.id)} onChange={() => toggleSelectPerawat(u.id)} />
-                      </td>
-                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
-                      <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{u.nama}</td>
-                      <td>{u.no_telefon || '-'}</td>
-                      <td>{u.kelayakan || 'Perawat Bertauliah Darul Syifa'}</td>
-                      <td>{u.bidang_khusus || 'Ruqyah Syar’iyyah Am'}</td>
-                      <td>{u.status_aktif ? <span className={styles.badgeOk}>Aktif</span> : <span className={styles.badgeLow}>Bercuti</span>}</td>
-                      <td>
-                        <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
-                          <button onClick={() => { setPerawatDiedit(u); setBukaModalPerawat(true); }} className={styles.btnEdit}>
-                            <Edit size={12} /> Edit
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {senaraiPerawat.map((u, idx) => {
+                    const sudahTamat = Boolean(u.tarikh_tamat_lesen && u.tarikh_tamat_lesen < tarikhHariIni);
+                    const statusLesenPaparan = sudahTamat ? 'Tamat Tempoh' : (u.status_lesen || 'Belum Didaftar');
+
+                    return (
+                      <tr key={u.id}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input type="checkbox" className={styles.tableCheckbox} checked={selectedPerawat.includes(u.id)} onChange={() => toggleSelectPerawat(u.id)} />
+                        </td>
+                        <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                        <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{u.nama}</td>
+                        <td>{u.no_telefon || '-'}</td>
+                        <td style={{ color: u.lesen_kkm ? '#e2e8f0' : '#64748b', fontWeight: u.lesen_kkm ? 500 : 400 }}>
+                          {u.lesen_kkm || '-'}
+                        </td>
+                        <td>
+                          {statusLesenPaparan === 'Aktif' ? (
+                            <span className={styles.badgeOk}>Aktif</span>
+                          ) : statusLesenPaparan === 'Tamat Tempoh' ? (
+                            <span className={styles.badgeLow}>Tamat Tempoh</span>
+                          ) : statusLesenPaparan === 'Dalam Proses' ? (
+                            <span
+                              className={styles.badgeMethod}
+                              style={{
+                                backgroundColor: 'rgba(245, 158, 11, 0.18)',
+                                color: '#fbbf24',
+                                border: '1px solid rgba(245, 158, 11, 0.35)'
+                              }}
+                            >
+                              Dalam Proses
+                            </span>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{statusLesenPaparan}</span>
+                          )}
+                        </td>
+                        <td style={{ color: sudahTamat ? '#f87171' : '#cbd5e1', fontWeight: sudahTamat ? 500 : 400 }}>
+                          {u.tarikh_tamat_lesen
+                            ? new Date(u.tarikh_tamat_lesen).toLocaleDateString('ms-MY')
+                            : '-'}
+                        </td>
+                        <td>
+                          {u.no_kad_perawat ? (
+                            <span style={{ color: '#38bdf8', fontWeight: 500, fontFamily: 'monospace', fontSize: '0.82rem' }}>
+                              {u.no_kad_perawat}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#64748b' }}>-</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className={styles.actionGroup} style={{ justifyContent: 'center' }}>
+                            <button onClick={() => { setPerawatDiedit(u); setBukaModalPerawat(true); }} className={styles.btnEdit}>
+                              <Edit size={12} /> Edit
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2780,12 +2845,65 @@ export default function PapanPemukaAdmin() {
                   <input type="text" required placeholder="cth: Ustaz Dr. Amri Mahmud" className={styles.inputField} value={perawatDiedit.nama} onChange={(e) => setPerawatDiedit({ ...perawatDiedit, nama: e.target.value })} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Bilik Rawatan:</label>
-                  <input type="text" disabled className={styles.inputField} value="Ditetapkan Semasa Check-In" style={{ opacity: 0.6, cursor: 'not-allowed', backgroundColor: '#0f172a' }} />
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Kad Perawat (No. Ahli / Tauliah):</label>
+                  <input
+                    type="text"
+                    placeholder="cth: DS-PRW-001"
+                    className={styles.inputField}
+                    value={perawatDiedit.no_kad_perawat || ''}
+                    onChange={(e) => setPerawatDiedit({ ...perawatDiedit, no_kad_perawat: e.target.value })}
+                  />
                 </div>
                 <div>
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Telefon:</label>
                   <input type="text" placeholder="012-3456789" className={styles.inputField} value={perawatDiedit.no_telefon || ''} onChange={(e) => setPerawatDiedit({ ...perawatDiedit, no_telefon: e.target.value })} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Lesen KKM (PT&amp;K):</label>
+                  <input
+                    type="text"
+                    placeholder="cth: KKM/PTK/2026/00123"
+                    className={styles.inputField}
+                    value={perawatDiedit.lesen_kkm || ''}
+                    onChange={(e) => setPerawatDiedit({ ...perawatDiedit, lesen_kkm: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Status Lesen KKM:</label>
+                  <select
+                    className={styles.selectField}
+                    value={perawatDiedit.status_lesen || 'Aktif'}
+                    onChange={(e) => setPerawatDiedit({ ...perawatDiedit, status_lesen: e.target.value })}
+                  >
+                    <option value="Aktif">Aktif</option>
+                    <option value="Dalam Proses">Dalam Proses</option>
+                    <option value="Tamat Tempoh">Tamat Tempoh</option>
+                    <option value="Belum Didaftar">Belum Didaftar</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Tarikh Tamat Lesen:</label>
+                  <input
+                    type="date"
+                    className={styles.inputField}
+                    value={perawatDiedit.tarikh_tamat_lesen ? String(perawatDiedit.tarikh_tamat_lesen).slice(0, 10) : ''}
+                    onChange={(e) => setPerawatDiedit({ ...perawatDiedit, tarikh_tamat_lesen: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Status Perkhidmatan Klinik:</label>
+                  <select
+                    className={styles.selectField}
+                    value={perawatDiedit.status_aktif ? 'true' : 'false'}
+                    onChange={(e) => setPerawatDiedit({ ...perawatDiedit, status_aktif: e.target.value === 'true' })}
+                  >
+                    <option value="true">Aktif Bertugas</option>
+                    <option value="false">Bercuti / Tidak Aktif</option>
+                  </select>
+                </div>
+                <div className={styles.formGroupFull}>
+                  <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>No. Bilik Rawatan:</label>
+                  <input type="text" disabled className={styles.inputField} value="Ditetapkan Semasa Check-In" style={{ opacity: 0.6, cursor: 'not-allowed', backgroundColor: '#0f172a' }} />
                 </div>
                 <div className={styles.formGroupFull}>
                   <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Kelayakan / Sijil Tauliah:</label>
