@@ -1043,6 +1043,14 @@ export default function PapanPemukaAdmin() {
     }
   };
 
+  // Helper tukar nama ALL CAPS kepada Title Case sebelum simpan ke pangkalan data
+  const formatNamaTitleCase = (nama: string): string => {
+    return nama
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g, (abjad) => abjad.toUpperCase());
+  };
+
   const simpanPerawat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!perawatDiedit) return;
