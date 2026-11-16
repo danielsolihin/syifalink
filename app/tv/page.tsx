@@ -569,7 +569,7 @@ export default function SkrinTVDewan() {
       .replace(/\b9\b/g, 'sembilan');
 
     let ayat = `Nombor giliran, ${abjad}, ${digitDieja}. Sila masuk ke ${bilikDieja}.`;
-    if (namaPerawat && !namaPerawat.toLowerCase().includes('tabib bertugas')) {
+    if (namaPerawat && !namaPerawat.toLowerCase().includes('perawat bertugas')) {
       const namaSebutanBetul = normalkanSebutanNama(namaPerawat);
       ayat += ` Bersama ${namaSebutanBetul}.`;
     }
@@ -680,14 +680,14 @@ export default function SkrinTVDewan() {
         );
 
         const namaBilikSah = bilikUstaz ? bilikUstaz.nama_bilik : perawatObj?.no_bilik || 'Bilik Rawatan';
-        const namaTabibSah = bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Tabib Bertugas';
+        const namaPerawatSah = bilikUstaz?.perawat?.nama || perawatObj?.nama || 'Perawat Bertugas';
 
         const infoPanggilan: InfoPanggilan = {
           id: palingKini.id,
           noGiliran: palingKini.no_giliran,
           namaPesakit: (palingKini.pesakit as any)?.nama || 'Pesakit',
           bilik: namaBilikSah,
-          namaPerawat: namaTabibSah,
+          namaPerawat: namaPerawatSah,
           perluKerusiRoda: Boolean((palingKini as any)?.perlu_kerusi_roda)
         };
 
@@ -1236,7 +1236,7 @@ export default function SkrinTVDewan() {
                 className={styles.welcomeText}
                 style={{ fontSize: '0.68rem', display: 'block', lineHeight: 1.1, color: warnaSubtajuk, fontWeight: 700 }}
               >
-                Klinik Pengubatan Islam • Ruang Menunggu Pesakit
+                Pusat Rawatan Kecil • Shah Alam, Bukit Jelutong
               </span>
               <h1
                 className={styles.clinicTitleText}
@@ -1249,7 +1249,7 @@ export default function SkrinTVDewan() {
                   textOverflow: 'ellipsis'
                 }}
               >
-                Pusat Rawatan Islam Darul Syifa&apos;
+                Pusat Rawatan Islam Darussyifa&apos;
               </h1>
             </div>
           </div>
@@ -2444,7 +2444,7 @@ export default function SkrinTVDewan() {
                               textOverflow: 'ellipsis'
                             }}
                           >
-                            {adaUstaz ? b.ustazNama : 'Tiada Tabib Bertugas'}
+                            {adaUstaz ? b.ustazNama : 'Tiada Perawat Bertugas'}
                           </div>
                           {adaUstaz && b.lesenKkm && (
                             <div
