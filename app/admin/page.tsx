@@ -26,7 +26,8 @@ import {
   DoorOpen, 
   Radio,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Archive
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -122,8 +123,24 @@ export default function PapanPemukaAdmin() {
   const [tabAktif, setTabAktif] = useState<string>('kewangan');
   const [subTabInventori, setSubTabInventori] = useState<'baki' | 'masuk' | 'keluar' | 'semua'>('baki');
 
-  // Penapis & Data Kewangan Dinamik
-  const [tempohKewanganPilihan, setTempohKewanganPilihan] = useState<'hari' | 'minggu' | 'bulan' | 'total'>('hari');
+  // Helper Penukaran Tarikh Waktu Malaysia (GMT+8)
+  const formatTarikhMY = (input?: string | Date): string => {
+    const d = input ? new Date(input) : new Date();
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  };
+
+  const tarikhHariIni = formatTarikhMY();
+  const tahunSemasa = tarikhHariIni.slice(0, 4);
+
+  // Penapis & Data Kewangan Dinamik (Termasuk Laporan Setahun & Arkib Tahun)
+  const [tempohKewanganPilihan, setTempohKewanganPilihan] = useState<'hari' | 'minggu' | 'bulan' | 'tahun' | 'total'>('hari');
+  const [tahunKewanganPilihan, setTahunKewanganPilihan] = useState<string>(tahunSemasa);
   const [semuaTransaksiMasuk, setSemuaTransaksiMasuk] = useState<any[]>([]);
 
   // Data Inventori
@@ -134,9 +151,10 @@ export default function PapanPemukaAdmin() {
   const [catatanStok, setCatatanStok] = useState('');
   const [selectedBahan, setSelectedBahan] = useState<string[]>([]);
 
-  // Data Pesakit & Carian
+  // Data Pesakit, Carian & Halaman (Pagination)
   const [senaraiPesakit, setSenaraiPesakit] = useState<Pesakit[]>([]);
   const [carianPesakit, setCarianPesakit] = useState('');
+  const [halamanPesakit, setHalamanPesakit] = useState<number>(1);
   const [pesakitDiedit, setPesakitDiedit] = useState<Pesakit | null>(null);
   const [pesakitGarisMasa, setPesakitGarisMasa] = useState<any | null>(null);
   const [sejarahSesi, setSejarahSesi] = useState<any[]>([]);
@@ -275,18 +293,6 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // Helper Penukaran Tarikh Waktu Malaysia (GMT+8)
-  const formatTarikhMY = (input?: string | Date): string => {
-    const d = input ? new Date(input) : new Date();
-    if (isNaN(d.getTime())) return '';
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
-  };
-
   const normalisasiTarikhStr = (str: string): string => {
     const bersih = str.trim();
     if (/^\d{4}-\d{2}-\d{2}/.test(bersih)) return bersih.slice(0, 10);
@@ -315,8 +321,6 @@ export default function PapanPemukaAdmin() {
   };
 
   // 3. Pengiraan Tarikh & Penapis Transaksi Dinamik (Waktu Malaysia)
-  const tarikhHariIni = formatTarikhMY();
-
   const tarikhMulaMinggu = useMemo(() => {
     const [y, m, d] = tarikhHariIni.split('-').map(Number);
     const lokal = new Date(y, m - 1, d);
@@ -330,11 +334,26 @@ export default function PapanPemukaAdmin() {
     return `${tarikhHariIni.slice(0, 7)}-01`;
   }, [tarikhHariIni]);
 
-  // Kiraan Ringkasan 4 Kad Utama (Perakaunan Tepat Tanpa Pengiraan Berganda)
+  // Senarai Tahun Tersedia Secara Automatik (2026, 2027, ...)
+  const senaraiTahunTersedia = useMemo(() => {
+    const setTahun = new Set<string>([tahunSemasa]);
+    semuaTransaksiMasuk.forEach((trx) => {
+      const t = ekstrakTarikhTrxMY(trx);
+      if (t && t.length >= 4) {
+        setTahun.add(t.slice(0, 4));
+      }
+    });
+    return Array.from(setTahun).sort((a, b) => b.localeCompare(a));
+  }, [semuaTransaksiMasuk, tahunSemasa]);
+
+  const tahunSasaran = tahunKewanganPilihan === 'semua' ? tahunSemasa : tahunKewanganPilihan;
+
+  // Kiraan Ringkasan 5 Kad Utama (Hari, Minggu, Bulan, Setahun, Keseluruhan)
   const ringkasanKutipan = useMemo(() => {
     let hariIni = 0;
     let mingguIni = 0;
     let bulanIni = 0;
+    let setahun = 0;
     let totalKutipan = 0;
 
     semuaTransaksiMasuk.forEach((trx) => {
@@ -345,21 +364,23 @@ export default function PapanPemukaAdmin() {
       if (isTransaksiHariIni(trx, tarikhHariIni)) hariIni += val;
       if (t >= tarikhMulaMinggu) mingguIni += val;
       if (t >= tarikhMulaBulan) bulanIni += val;
+      if (t.startsWith(tahunSasaran)) setahun += val;
     });
 
-    return { hariIni, mingguIni, bulanIni, totalKutipan };
-  }, [semuaTransaksiMasuk, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan]);
+    return { hariIni, mingguIni, bulanIni, setahun, totalKutipan };
+  }, [semuaTransaksiMasuk, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan, tahunSasaran]);
 
-  // Transaksi Ditapis Mengikut Kad Yang Dipilih
+  // Transaksi Ditapis Mengikut Kad atau Tahun Yang Dipilih
   const transaksiDitapis = useMemo(() => {
     return semuaTransaksiMasuk.filter((trx) => {
       const t = ekstrakTarikhTrxMY(trx);
       if (tempohKewanganPilihan === 'hari') return isTransaksiHariIni(trx, tarikhHariIni);
       if (tempohKewanganPilihan === 'minggu') return t >= tarikhMulaMinggu;
       if (tempohKewanganPilihan === 'bulan') return t >= tarikhMulaBulan;
+      if (tempohKewanganPilihan === 'tahun') return t.startsWith(tahunSasaran);
       return true;
     });
-  }, [semuaTransaksiMasuk, tempohKewanganPilihan, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan]);
+  }, [semuaTransaksiMasuk, tempohKewanganPilihan, tarikhHariIni, tarikhMulaMinggu, tarikhMulaBulan, tahunSasaran]);
 
   // Pecahan Kutipan (Tunai / QR / Resit) Mengikut Kad Yang Aktif
   const pecahanKutipanAktif = useMemo(() => {
@@ -569,19 +590,30 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // B. Tindakan Pesakit
-  const senaraiPesakitDitapis = senaraiPesakit.filter(
-    (p) =>
-      p.nama.toLowerCase().includes(carianPesakit.toLowerCase()) ||
-      p.no_ic.includes(carianPesakit) ||
-      p.no_telefon.includes(carianPesakit)
+  // B. Tindakan Pesakit & Halaman (50 rekod setiap halaman)
+  const REKOD_PER_HALAMAN = 50;
+
+  const senaraiPesakitDitapis = useMemo(() => {
+    return senaraiPesakit.filter(
+      (p) =>
+        p.nama.toLowerCase().includes(carianPesakit.toLowerCase()) ||
+        p.no_ic.includes(carianPesakit) ||
+        p.no_telefon.includes(carianPesakit)
+    );
+  }, [senaraiPesakit, carianPesakit]);
+
+  const jumlahHalamanPesakit = Math.max(1, Math.ceil(senaraiPesakitDitapis.length / REKOD_PER_HALAMAN));
+  const halamanPesakitSah = Math.min(halamanPesakit, jumlahHalamanPesakit);
+  const senaraiPesakitHalaman = senaraiPesakitDitapis.slice(
+    (halamanPesakitSah - 1) * REKOD_PER_HALAMAN,
+    halamanPesakitSah * REKOD_PER_HALAMAN
   );
 
   const toggleSelectAllPesakit = () => {
-    if (selectedPesakit.length === senaraiPesakitDitapis.length) {
+    if (selectedPesakit.length === senaraiPesakitHalaman.length) {
       setSelectedPesakit([]);
     } else {
-      setSelectedPesakit(senaraiPesakitDitapis.map((p) => p.id));
+      setSelectedPesakit(senaraiPesakitHalaman.map((p) => p.id));
     }
   };
 
@@ -1043,25 +1075,14 @@ export default function PapanPemukaAdmin() {
     }
   };
 
-  // Helper tukar nama ALL CAPS kepada Title Case sebelum simpan ke pangkalan data
-  const formatNamaTitleCase = (nama: string): string => {
-    return nama
-      .trim()
-      .toLowerCase()
-      .replace(/\b\w/g, (abjad) => abjad.toUpperCase());
-  };
-
   const simpanPerawat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!perawatDiedit) return;
     setMemproses(true);
 
-    const namaDiformat = formatNamaTitleCase(perawatDiedit.nama);
-
     try {
-      if (perawatDiedit.id) {
+      if (perawatDiedit && perawatDiedit.id) {
         const { error } = await supabase.from('perawat').update({
-          nama: namaDiformat,
+          nama: perawatDiedit.nama,
           no_bilik: '-',
           no_ic: perawatDiedit.no_ic,
           no_telefon: perawatDiedit.no_telefon,
@@ -1076,9 +1097,9 @@ export default function PapanPemukaAdmin() {
 
         if (error) throw error;
         alert('Maklumat perawat dikemaskini!');
-      } else {
+      } else if (perawatDiedit) {
         const { error } = await supabase.from('perawat').insert({
-          nama: namaDiformat,
+          nama: perawatDiedit.nama,
           no_bilik: '-',
           no_ic: perawatDiedit.no_ic,
           no_telefon: perawatDiedit.no_telefon,
@@ -1214,7 +1235,8 @@ export default function PapanPemukaAdmin() {
     hari: 'Hari Ini',
     minggu: 'Minggu Ini',
     bulan: 'Bulan Ini',
-    total: 'Keseluruhan (Semua Bulan)'
+    tahun: `Setahun (${tahunSasaran})`,
+    total: 'Keseluruhan (Semua Tahun)'
   }[tempohKewanganPilihan];
 
   return (
@@ -1524,124 +1546,167 @@ export default function PapanPemukaAdmin() {
         {tabAktif === 'kewangan' && isKewangan && (
           <div style={{ width: '100%' }}>
             <p style={{ margin: '0 0 0.85rem 0', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 400 }}>
-              💡 <em>Klik pada mana-mana kad tempoh kutipan di bawah untuk melihat perincian dan transaksi spesifik:</em>
+              💡 <em>Klik pada mana-mana kad tempoh kutipan atau pilih tahun di jadual bawah untuk melihat penyata spesifik:</em>
             </p>
 
-            {/* 4 KAD INTERAKTIF */}
+            {/* 5 KAD INTERAKTIF (HARI, MINGGU, BULAN, SETAHUN, KESELURUHAN) */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '1rem',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))',
+              gap: '0.85rem',
               marginBottom: '1.25rem'
             }}>
               {/* KAD 1: HARI INI */}
               <div 
-                onClick={() => setTempohKewanganPilihan('hari')}
+                onClick={() => {
+                  setTahunKewanganPilihan(tahunSemasa);
+                  setTempohKewanganPilihan('hari');
+                }}
                 style={{ 
                   backgroundColor: '#1e293b', 
                   border: tempohKewanganPilihan === 'hari' ? '1.5px solid #10b981' : '1px solid #334155', 
                   borderRadius: '0.75rem', 
-                  padding: '1rem 1.15rem',
+                  padding: '0.95rem 1.05rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                   boxShadow: tempohKewanganPilihan === 'hari' ? '0 4px 15px rgba(16, 185, 129, 0.2)' : 'none'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#34d399', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#34d399', fontSize: '0.72rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     <TrendingUp size={14} /> Kutipan Hari Ini
                   </div>
                   {tempohKewanganPilihan === 'hari' && (
-                    <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 500, backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                    <span style={{ fontSize: '0.64rem', color: '#10b981', fontWeight: 500, backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
                       Dipilih
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#10b981', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                <div style={{ fontSize: '1.45rem', fontWeight: 600, color: '#10b981', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
                   RM {ringkasanKutipan.hariIni.toFixed(2)}
                 </div>
               </div>
 
               {/* KAD 2: MINGGU INI */}
               <div 
-                onClick={() => setTempohKewanganPilihan('minggu')}
+                onClick={() => {
+                  setTahunKewanganPilihan(tahunSemasa);
+                  setTempohKewanganPilihan('minggu');
+                }}
                 style={{ 
                   backgroundColor: '#1e293b', 
                   border: tempohKewanganPilihan === 'minggu' ? '1.5px solid #06b6d4' : '1px solid #334155', 
                   borderRadius: '0.75rem', 
-                  padding: '1rem 1.15rem',
+                  padding: '0.95rem 1.05rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                   boxShadow: tempohKewanganPilihan === 'minggu' ? '0 4px 15px rgba(6, 182, 212, 0.2)' : 'none'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#22d3ee', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#22d3ee', fontSize: '0.72rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     <Calendar size={14} /> Kutipan Minggu Ini
                   </div>
                   {tempohKewanganPilihan === 'minggu' && (
-                    <span style={{ fontSize: '0.65rem', color: '#06b6d4', fontWeight: 500, backgroundColor: 'rgba(6, 182, 212, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                    <span style={{ fontSize: '0.64rem', color: '#06b6d4', fontWeight: 500, backgroundColor: 'rgba(6, 182, 212, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
                       Dipilih
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#06b6d4', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                <div style={{ fontSize: '1.45rem', fontWeight: 600, color: '#06b6d4', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
                   RM {ringkasanKutipan.mingguIni.toFixed(2)}
                 </div>
               </div>
 
               {/* KAD 3: BULAN INI */}
               <div 
-                onClick={() => setTempohKewanganPilihan('bulan')}
+                onClick={() => {
+                  setTahunKewanganPilihan(tahunSemasa);
+                  setTempohKewanganPilihan('bulan');
+                }}
                 style={{ 
                   backgroundColor: '#1e293b', 
                   border: tempohKewanganPilihan === 'bulan' ? '1.5px solid #38bdf8' : '1px solid #334155', 
                   borderRadius: '0.75rem', 
-                  padding: '1rem 1.15rem',
+                  padding: '0.95rem 1.05rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                   boxShadow: tempohKewanganPilihan === 'bulan' ? '0 4px 15px rgba(56, 189, 248, 0.2)' : 'none'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#38bdf8', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#38bdf8', fontSize: '0.72rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     <Calendar size={14} /> Kutipan Bulan Ini
                   </div>
                   {tempohKewanganPilihan === 'bulan' && (
-                    <span style={{ fontSize: '0.65rem', color: '#38bdf8', fontWeight: 500, backgroundColor: 'rgba(56, 189, 248, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
+                    <span style={{ fontSize: '0.64rem', color: '#38bdf8', fontWeight: 500, backgroundColor: 'rgba(56, 189, 248, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
                       Dipilih
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#38bdf8', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                <div style={{ fontSize: '1.45rem', fontWeight: 600, color: '#38bdf8', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
                   RM {ringkasanKutipan.bulanIni.toFixed(2)}
                 </div>
               </div>
 
-              {/* KAD 4: KUTIPAN KESELURUHAN (SEMUA BULAN) */}
+              {/* KAD 4: KUTIPAN SETAHUN (TAHUN AKTIF / ARKIB TAHUN) */}
               <div 
-                onClick={() => setTempohKewanganPilihan('total')}
+                onClick={() => {
+                  if (tahunKewanganPilihan === 'semua') setTahunKewanganPilihan(tahunSemasa);
+                  setTempohKewanganPilihan('tahun');
+                }}
+                style={{ 
+                  backgroundColor: '#1e293b', 
+                  border: tempohKewanganPilihan === 'tahun' ? '1.5px solid #f59e0b' : '1px solid #334155', 
+                  borderRadius: '0.75rem', 
+                  padding: '0.95rem 1.05rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: tempohKewanganPilihan === 'tahun' ? '0 4px 15px rgba(245, 158, 11, 0.2)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.3rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#fbbf24', fontSize: '0.72rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    <Archive size={14} /> Kutipan Setahun ({tahunSasaran})
+                  </div>
+                  {tempohKewanganPilihan === 'tahun' && (
+                    <span style={{ fontSize: '0.64rem', color: '#fbbf24', fontWeight: 500, backgroundColor: 'rgba(245, 158, 11, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem', flexShrink: 0 }}>
+                      Dipilih
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '1.45rem', fontWeight: 600, color: '#fbbf24', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                  RM {ringkasanKutipan.setahun.toFixed(2)}
+                </div>
+              </div>
+
+              {/* KAD 5: KUTIPAN KESELURUHAN (SEMUA TAHUN) */}
+              <div 
+                onClick={() => {
+                  setTahunKewanganPilihan('semua');
+                  setTempohKewanganPilihan('total');
+                }}
                 style={{ 
                   backgroundColor: '#1e293b', 
                   border: tempohKewanganPilihan === 'total' ? '1.5px solid #a855f7' : '1px solid #334155', 
                   borderRadius: '0.75rem', 
-                  padding: '1rem 1.15rem',
+                  padding: '0.95rem 1.05rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                   boxShadow: tempohKewanganPilihan === 'total' ? '0 4px 15px rgba(168, 85, 247, 0.2)' : 'none'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.35rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#c084fc', fontSize: '0.72rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                    <DollarSign size={14} /> Kutipan Keseluruhan (Semua Bulan)
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.3rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#c084fc', fontSize: '0.71rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                    <DollarSign size={14} /> Keseluruhan (Semua Tahun)
                   </div>
                   {tempohKewanganPilihan === 'total' && (
-                    <span style={{ fontSize: '0.65rem', color: '#c084fc', fontWeight: 500, backgroundColor: 'rgba(168, 85, 247, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem', flexShrink: 0 }}>
+                    <span style={{ fontSize: '0.64rem', color: '#c084fc', fontWeight: 500, backgroundColor: 'rgba(168, 85, 247, 0.15)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem', flexShrink: 0 }}>
                       Dipilih
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '1.55rem', fontWeight: 600, color: '#c084fc', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
+                <div style={{ fontSize: '1.45rem', fontWeight: 600, color: '#c084fc', marginTop: '0.4rem', letterSpacing: '-0.01em' }}>
                   RM {ringkasanKutipan.totalKutipan.toFixed(2)}
                 </div>
               </div>
@@ -1682,9 +1747,9 @@ export default function PapanPemukaAdmin() {
               </div>
             </div>
 
-            {/* JADUAL TRANSAKSI */}
+            {/* JADUAL TRANSAKSI & PENAPIS ARKIB TAHUN */}
             <div className={styles.cardPanel} style={{ width: '100%', boxSizing: 'border-box' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.85rem' }}>
                 <div>
                   <h2 className={styles.panelTitle} style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
                     Rekod Transaksi Masuk — {labelTempoh}
@@ -1693,7 +1758,45 @@ export default function PapanPemukaAdmin() {
                     Menunjukkan {transaksiDitapis.length} transaksi bagi pilihan aktif
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* PENAPIS TAHUN (ARKIB TAHUNAN) */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <label htmlFor="penapis-tahun-kewangan" style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>
+                      Arkib Tahun:
+                    </label>
+                    <select
+                      id="penapis-tahun-kewangan"
+                      value={tempohKewanganPilihan === 'total' ? 'semua' : tahunKewanganPilihan}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTahunKewanganPilihan(val);
+                        if (val === 'semua') {
+                          setTempohKewanganPilihan('total');
+                        } else {
+                          setTempohKewanganPilihan('tahun');
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#0f172a',
+                        color: '#fbbf24',
+                        border: '1px solid #475569',
+                        padding: '0.35rem 0.65rem',
+                        borderRadius: '0.4rem',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        outline: 'none'
+                      }}
+                    >
+                      {senaraiTahunTersedia.map((thn) => (
+                        <option key={thn} value={thn}>
+                          Tahun {thn} {thn === tahunSemasa ? '(Semasa)' : ''}
+                        </option>
+                      ))}
+                      <option value="semua">Semua Tahun</option>
+                    </select>
+                  </div>
+
                   <button
                     type="button"
                     onClick={muatDataKewangan}
@@ -1914,14 +2017,29 @@ export default function PapanPemukaAdmin() {
         {tabAktif === 'pesakit' && isPesakit && (
           <div className={styles.cardPanel} style={{ width: '100%' }}>
             <div className={styles.tableHeaderActionRow}>
-              <div><h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Direktori Pesakit &amp; Rekod Rawatan</h2></div>
+              <div>
+                <h2 className={styles.panelTitle} style={{ margin: 0, fontWeight: 600 }}>Direktori Pesakit &amp; Rekod Rawatan</h2>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Jumlah keseluruhan rekod aktif: <strong>{senaraiPesakit.length}</strong> pesakit (disimpan sepanjang hayat untuk semakan pantas kiosk &amp; sejarah klinikal)
+                </p>
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 {selectedPesakit.length > 0 && (
                   <button onClick={padamPesakitPukal} disabled={memproses} className={styles.btnBulkDelete}>
                     <Trash2 size={13} /> Padam Terpilih ({selectedPesakit.length})
                   </button>
                 )}
-                <input type="text" placeholder="Cari nama, No. IC, atau No. Tel..." className={styles.searchBar} value={carianPesakit} onChange={(e) => setCarianPesakit(e.target.value)} />
+                <input
+                  type="text"
+                  placeholder="Cari nama, No. IC, atau No. Tel..."
+                  className={styles.searchBar}
+                  value={carianPesakit}
+                  onChange={(e) => {
+                    setCarianPesakit(e.target.value);
+                    setHalamanPesakit(1);
+                    setSelectedPesakit([]);
+                  }}
+                />
               </div>
             </div>
 
@@ -1930,7 +2048,7 @@ export default function PapanPemukaAdmin() {
                 <thead>
                   <tr>
                     <th style={{ width: '40px', textAlign: 'center' }}>
-                      <input type="checkbox" className={styles.tableCheckbox} checked={senaraiPesakitDitapis.length > 0 && selectedPesakit.length === senaraiPesakitDitapis.length} onChange={toggleSelectAllPesakit} />
+                      <input type="checkbox" className={styles.tableCheckbox} checked={senaraiPesakitHalaman.length > 0 && selectedPesakit.length === senaraiPesakitHalaman.length} onChange={toggleSelectAllPesakit} />
                     </th>
                     <th style={{ width: '45px', textAlign: 'center', fontWeight: 500 }}>No.</th>
                     <th style={{ fontWeight: 500 }}>Nama Pesakit</th>
@@ -1942,12 +2060,14 @@ export default function PapanPemukaAdmin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {senaraiPesakitDitapis.map((p, idx) => (
+                  {senaraiPesakitHalaman.map((p, idx) => (
                     <tr key={p.id}>
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" className={styles.tableCheckbox} checked={selectedPesakit.includes(p.id)} onChange={() => toggleSelectPesakit(p.id)} />
                       </td>
-                      <td style={{ textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
+                      <td style={{ textAlign: 'center', color: '#64748b' }}>
+                        {(halamanPesakitSah - 1) * REKOD_PER_HALAMAN + idx + 1}
+                      </td>
                       <td style={{ color: '#f1f5f9', fontWeight: 500 }}>{p.nama}</td>
                       <td>{p.no_ic}</td>
                       <td>{p.no_telefon}</td>
@@ -1964,6 +2084,69 @@ export default function PapanPemukaAdmin() {
                 </tbody>
               </table>
             </div>
+
+            {/* KAWALAN HALAMAN (MUNCUL AUTOMATIK APABILA REKOD MELEBIHI 50 ORANG) */}
+            {senaraiPesakitDitapis.length > REKOD_PER_HALAMAN && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '1rem',
+                paddingTop: '0.85rem',
+                borderTop: '1px solid #334155',
+                fontSize: '0.8rem',
+                color: '#94a3b8'
+              }}>
+                <span>
+                  Paparan {(halamanPesakitSah - 1) * REKOD_PER_HALAMAN + 1} –{' '}
+                  {Math.min(halamanPesakitSah * REKOD_PER_HALAMAN, senaraiPesakitDitapis.length)} daripada{' '}
+                  <strong>{senaraiPesakitDitapis.length}</strong> pesakit
+                </span>
+                <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    disabled={halamanPesakitSah <= 1}
+                    onClick={() => {
+                      setHalamanPesakit((prev) => Math.max(1, prev - 1));
+                      setSelectedPesakit([]);
+                    }}
+                    style={{
+                      backgroundColor: '#1e293b',
+                      color: halamanPesakitSah <= 1 ? '#475569' : '#f1f5f9',
+                      border: '1px solid #334155',
+                      padding: '0.35rem 0.7rem',
+                      borderRadius: '0.4rem',
+                      cursor: halamanPesakitSah <= 1 ? 'not-allowed' : 'pointer',
+                      fontSize: '0.78rem'
+                    }}
+                  >
+                    ← Sebelum
+                  </button>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
+                    Halaman {halamanPesakitSah} / {jumlahHalamanPesakit}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={halamanPesakitSah >= jumlahHalamanPesakit}
+                    onClick={() => {
+                      setHalamanPesakit((prev) => Math.min(jumlahHalamanPesakit, prev + 1));
+                      setSelectedPesakit([]);
+                    }}
+                    style={{
+                      backgroundColor: '#1e293b',
+                      color: halamanPesakitSah >= jumlahHalamanPesakit ? '#475569' : '#f1f5f9',
+                      border: '1px solid #334155',
+                      padding: '0.35rem 0.7rem',
+                      borderRadius: '0.4rem',
+                      cursor: halamanPesakitSah >= jumlahHalamanPesakit ? 'not-allowed' : 'pointer',
+                      fontSize: '0.78rem'
+                    }}
+                  >
+                    Seterusnya →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
