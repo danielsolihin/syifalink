@@ -866,22 +866,24 @@ export default function SkrinTVDewan() {
   const warnaTajukKlinik = isEmeraldDark ? '#f8fafc' : isSand ? '#1b4332' : '#0f2942';
   const warnaSubtajuk = isEmeraldDark ? '#6ee7b7' : isSand ? '#785a28' : '#0d9488';
 
-  // Komponen Pemain Video Dikongsi antara Templat 1 & Templat 2 (Tanpa Jidar Hitam)
+  // Komponen Pemain Video Dikongsi antara Templat 1 & Templat 2
   const renderKotakVideo = (minHeightStr: string, modPaparan: 'klasik' | 'media' = 'klasik') => (
     <div
       style={{
-        height: '100%',
-        minHeight: minHeightStr,
+        height: modPaparan === 'klasik' ? 'calc(100% - 6px)' : '100%',
+        maxHeight: '100%',
+        minHeight: modPaparan === 'klasik' ? '0px' : minHeightStr,
         flex: modPaparan === 'media' ? 1 : undefined,
         backgroundColor: '#022432',
-        borderRadius: '1.1rem',
+        borderRadius: '1rem',
         overflow: 'hidden',
         border: isSand ? '2px solid rgba(180, 134, 65, 0.35)' : '2px solid rgba(255, 255, 255, 0.18)',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.22)',
+        boxShadow: '0 8px 20px rgba(0, 0, 0, 0.2)',
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        boxSizing: 'border-box'
       }}
     >
       {videoSemasa ? (
@@ -1377,7 +1379,16 @@ export default function SkrinTVDewan() {
             TEMPLAT 1: KLASIK KLINIK (SEIMBANG + CORAK ISLAMIK SANTAI)
             ======================================================== */}
         {templateAktif === 'klinik_klasik' && (
-          <div className={styles.mainLayout} style={{ gap: '0.75rem' }}>
+          <div
+            className={styles.mainLayout}
+            style={{
+              gap: '0.7rem',
+              gridTemplateRows: 'minmax(0, 1.35fr) minmax(0, 0.82fr)',
+              paddingBottom: '0.45rem',
+              boxSizing: 'border-box',
+              minHeight: 0
+            }}
+          >
             {/* BARIS 1 KIRI: SEDANG DIPANGGIL (WARNA TEAL KLINIK) */}
             <section
               className={styles.nowSeeingCard}
@@ -1560,7 +1571,7 @@ export default function SkrinTVDewan() {
               )}
             </section>
 
-            {/* BARIS 1 KANAN: STATUS BILIK RAWATAN (KEMAS 2 BARIS, LESEN KKM KECIL SEBARIS) */}
+            {/* BARIS 1 KANAN: STATUS BILIK RAWATAN (LESEN KKM NIPIS & HALUS) */}
             <section
               className={styles.doctorStatusCard}
               style={{
@@ -1665,12 +1676,12 @@ export default function SkrinTVDewan() {
                                 <span
                                   style={{
                                     color: '#0f766e',
-                                    backgroundColor: '#e6f4f1',
-                                    border: '1px solid rgba(13, 148, 136, 0.25)',
-                                    padding: '1px 5px',
-                                    borderRadius: '0.25rem',
-                                    fontSize: '0.6rem',
-                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(230, 244, 241, 0.7)',
+                                    border: '1px solid rgba(13, 148, 136, 0.18)',
+                                    padding: '0px 4px',
+                                    borderRadius: '0.2rem',
+                                    fontSize: '0.54rem',
+                                    fontWeight: 500,
                                     letterSpacing: '0.01em',
                                     lineHeight: 1.1,
                                     whiteSpace: 'nowrap',
@@ -1745,37 +1756,41 @@ export default function SkrinTVDewan() {
               </div>
             </section>
 
-            {/* BARIS 2 KIRI: PEMAIN VIDEO */}
-            {renderKotakVideo('185px', 'klasik')}
+            {/* BARIS 2 KIRI: PEMAIN VIDEO (DIKECILKAN SEDIKIT SUPAYA TIDAK DITINDIH TICKER) */}
+            {renderKotakVideo('0px', 'klasik')}
 
             {/* BARIS 2 KANAN: GILIRAN MENUNGGU & SEDIA DI FARMASI */}
             <div
               className={styles.waitingBoxCard}
               style={{
-                padding: '0.65rem 0.9rem',
+                padding: '0.55rem 0.9rem',
+                height: 'calc(100% - 6px)',
+                maxHeight: '100%',
+                minHeight: 0,
+                boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                gap: '0.45rem'
+                gap: '0.35rem'
               }}
             >
               <div>
-                <div className={styles.waitingHeaderRow} style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                  <Users size={16} />
+                <div className={styles.waitingHeaderRow} style={{ fontSize: '0.84rem', marginBottom: '0.3rem' }}>
+                  <Users size={15} />
                   <span>GILIRAN MENUNGGU SETERUSNYA</span>
                 </div>
 
                 {senaraiMenunggu.length === 0 ? (
-                  <p style={{ color: '#64748b', fontSize: '0.8rem', margin: 0, fontStyle: 'italic' }}>
+                  <p style={{ color: '#64748b', fontSize: '0.78rem', margin: 0, fontStyle: 'italic' }}>
                     Tiada pesakit dalam senarai menunggu.
                   </p>
                 ) : (
-                  <div className={styles.waitingChipsRow} style={{ gap: '0.4rem' }}>
+                  <div className={styles.waitingChipsRow} style={{ gap: '0.38rem' }}>
                     {senaraiMenunggu.slice(0, 6).map((g, idx) => (
                       <span
                         key={idx}
                         className={styles.waitingChip}
-                        style={{ fontSize: '0.96rem', padding: '0.26rem 0.72rem' }}
+                        style={{ fontSize: '0.94rem', padding: '0.24rem 0.68rem' }}
                       >
                         {g.no_giliran}
                       </span>
@@ -1788,7 +1803,7 @@ export default function SkrinTVDewan() {
                 <div
                   style={{
                     borderTop: '1px dashed rgba(13, 148, 136, 0.3)',
-                    paddingTop: '0.4rem',
+                    paddingTop: '0.35rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -1797,7 +1812,7 @@ export default function SkrinTVDewan() {
                 >
                   <span
                     style={{
-                      fontSize: '0.76rem',
+                      fontSize: '0.75rem',
                       fontWeight: 800,
                       color: '#059669',
                       display: 'inline-flex',
@@ -1815,9 +1830,9 @@ export default function SkrinTVDewan() {
                         style={{
                           backgroundColor: '#059669',
                           color: '#ffffff',
-                          fontSize: '0.78rem',
+                          fontSize: '0.76rem',
                           fontWeight: 800,
-                          padding: '0.18rem 0.55rem',
+                          padding: '0.16rem 0.52rem',
                           borderRadius: '0.35rem'
                         }}
                       >
@@ -2097,11 +2112,12 @@ export default function SkrinTVDewan() {
                         {b.ustazNama && b.lesenKkm && (
                           <div
                             style={{
-                              fontSize: '0.62rem',
+                              fontSize: '0.55rem',
                               color: '#2d6a4f',
-                              fontWeight: 700,
-                              lineHeight: 1.1,
-                              marginTop: '0.04rem',
+                              fontWeight: 500,
+                              opacity: 0.88,
+                              lineHeight: 1.05,
+                              marginTop: '0.03rem',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis'
@@ -2433,13 +2449,15 @@ export default function SkrinTVDewan() {
                           {adaUstaz && b.lesenKkm && (
                             <div
                               style={{
-                                fontSize: '0.68rem',
-                                fontWeight: 700,
+                                fontSize: '0.58rem',
+                                fontWeight: 500,
                                 color: '#6ee7b7',
+                                opacity: 0.88,
+                                lineHeight: 1.05,
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                marginTop: '0.08rem'
+                                marginTop: '0.05rem'
                               }}
                             >
                               Lesen KKM: {b.lesenKkm}
